@@ -50,6 +50,7 @@ const inputCls =
   'w-full px-5 py-4 bg-gray-100 rounded-2xl border-2 border-transparent focus:border-[#FFD600] outline-none font-dm text-base text-[#0a0a0a] transition-all placeholder:text-gray-400';
 
 export default function CustomerSignup() {
+  const [username, setUsername] = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
@@ -60,13 +61,21 @@ export default function CustomerSignup() {
     e.preventDefault();
     setError('');
     setSuccess(false);
+
+    if (username.length < 3 || username.length > 15) {
+      setError('Username must be between 3 and 15 characters.');
+      return;
+    }
+
     try {
       const { data, error: signupError } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: window.location.origin + '/login',
           data: {
-            role: 'customer'
+            role: 'customer',
+            username: username
           }
         }
       });
@@ -80,7 +89,7 @@ export default function CustomerSignup() {
           .insert([{ 
             id: data.user.id, 
             role: 'customer',
-            username: email.split('@')[0]
+            username: username
           }]);
         
         if (profileError) console.error('Profile creation error:', profileError);
@@ -151,6 +160,20 @@ export default function CustomerSignup() {
 
           {!success ? (
             <form onSubmit={handleSignup} className="space-y-5">
+              <div className="space-y-2">
+                <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
+                  Username (3-15 chars)
+                </label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  placeholder="CoolCustomer123"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+
               <div className="space-y-2">
                 <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
                   Email Address

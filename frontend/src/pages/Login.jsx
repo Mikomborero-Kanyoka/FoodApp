@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight, Chrome } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight, Chrome, RefreshCw } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 // Inject Google Fonts + keyframes once
 const styleTag = document.createElement('style');
@@ -137,6 +137,7 @@ function Login() {
   const [showStaffLogin, setShowStaffLogin] = useState(false);
   const [showCustomerLogin, setShowCustomerLogin] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [facingMode, setFacingMode] = useState('environment'); // 'user' or 'environment'
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(window.location.search);
@@ -160,20 +161,41 @@ function Login() {
   const isCustomer = user?.user_metadata?.role === 'customer' || user?.app_metadata?.role === 'customer' || !!user;
 
   useEffect(() => {
-    let scanner;
+    let html5QrCode;
     if (isScanning) {
-      scanner = new Html5QrcodeScanner('reader', { fps: 10, qrbox: { width: 240, height: 240 } }, false);
-      scanner.render((decodedText) => {
-        if (decodedText.includes('/table/')) {
-          const tableId = decodedText.split('/table/')[1];
-          scanner.clear();
-          setIsScanning(false);
-          navigate(`/table/${tableId}`);
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      html5QrCode.start(
+        { facingMode: facingMode }, 
+        config,
+        (decodedText) => {
+          if (decodedText.includes('/table/')) {
+            const tableId = decodedText.split('/table/')[1];
+            html5QrCode.stop().then(() => {
+              setIsScanning(false);
+              navigate(`/table/${tableId}`);
+            }).catch(err => console.error(err));
+          }
+        },
+        (errorMessage) => {
+          // parse error, ignore
         }
-      }, () => {});
+      ).catch(err => {
+        console.error("Unable to start scanning.", err);
+      });
     }
-    return () => { if (scanner) scanner.clear().catch(console.error); };
-  }, [isScanning, navigate]);
+
+    return () => {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(err => console.error(err));
+      }
+    };
+  }, [isScanning, navigate, facingMode]);
+
+  const toggleCamera = () => {
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -368,8 +390,19 @@ function Login() {
             <h2 className="syne" style={{ fontSize: 20, fontWeight: 800, color: '#0a0a0a', marginBottom: 16 }}>
               Point at QR Code
             </h2>
-            <div className="scanner-wrapper" style={{ marginBottom: 20 }}>
-              <div id="reader" />
+            <div className="scanner-wrapper" style={{ marginBottom: 20, position: 'relative' }}>
+              <div id="reader" style={{ background: '#000', minHeight: '300px' }} />
+              <button 
+                onClick={toggleCamera}
+                style={{
+                  position: 'absolute', bottom: 16, right: 16,
+                  background: 'var(--primary)', border: 'none', borderRadius: '50%',
+                  width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 10
+                }}
+              >
+                <RefreshCw size={20} color="#000" />
+              </button>
             </div>
             <button className="pill-btn ghost-btn" onClick={() => setIsScanning(false)}>
               <X size={16} /> Cancel
