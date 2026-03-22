@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-sqlalchemy
-python-jose[cryptography]
-python-multipart
-qrcode
-pillow
-psycopg2-binary

@@ -1,15 +1,25 @@
-import axios from 'axios';
+import { supabase } from './supabaseClient'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000',
-});
+// This is a temporary wrapper to help with the transition from Axios to Supabase
+// In a full migration, you would use supabase directly in your components.
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const api = {
+  get: async (url, config = {}) => {
+    // Basic mapping of some common URLs to Supabase tables
+    // This is just to prevent immediate crashes while we migrate pages
+    const table = url.split('/')[1]
+    const { data, error } = await supabase.from(table).select('*')
+    if (error) throw error
+    return { data }
+  },
+  post: async (url, body, config = {}) => {
+    const table = url.split('/')[1]
+    const { data, error } = await supabase.from(table).insert(body).select()
+    if (error) throw error
+    return { data }
+  },
+  // Add other methods as needed
+}
 
-export default api;
+export default supabase // Prefer exporting supabase directly
+export { api }

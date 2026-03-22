@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../api';
+import { supabase } from '../supabaseClient';
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   Plus, Utensils, Printer, Users, ShoppingBag,
   Clock, X, Zap, LayoutDashboard, Upload, ImageIcon,
@@ -123,27 +124,45 @@ export default function BranchDashboard() {
 
   useEffect(() => {
     fetchTables(); fetchMenu(); fetchEmployees(); fetchOrders(); fetchRoles(); fetchCustomers();
+    
+    // Subscribe to real-time changes
+    const tablesSubscription = supabase
+      .channel('public:tables')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `branch_id=eq.${branchId}` }, fetchTables)
+      .subscribe();
+
+    const ordersSubscription = supabase
+      .channel('public:orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `branch_id=eq.${branchId}` }, fetchOrders)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tablesSubscription);
+      supabase.removeChannel(ordersSubscription);
+    };
   }, [branchId]);
 
-  const fetchTables    = async () => { try { const r = await api.get(`/branches/${branchId}/tables`); setTables(r.data);    } catch(e){ console.error(e); } };
-  const fetchMenu      = async () => { try { const r = await api.get(`/branches/${branchId}/menu`);   setMenuItems(r.data); } catch(e){ console.error(e); } };
-  const fetchEmployees = async () => { try { const r = await api.get(`/branches/${branchId}/users`);  setEmployees(r.data); } catch(e){ console.error(e); } };
-  const fetchOrders    = async () => { try { const r = await api.get(`/branches/${branchId}/orders`); setOrders(r.data);    } catch(e){ console.error(e); } };
-  const fetchRoles     = async () => { try { const r = await api.get('/roles');                        setRoles(r.data);     } catch(e){ console.error(e); } };
-  const fetchCustomers = async () => { try { const r = await api.get('/customers');                    setCustomers(r.data); } catch(e){ console.error(e); } };
+  const fetchTables    = async () => { try { const { data, error } = await supabase.from('tables').select('*').eq('branch_id', branchId).order('number'); if (error) throw error; setTables(data);    } catch(e){ console.error(e); } };
+  const fetchMenu      = async () => { try { const { data, error } = await supabase.from('menu_items').select('*').eq('branch_id', branchId); if (error) throw error; setMenuItems(data); } catch(e){ console.error(e); } };
+  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*').eq('branch_id', branchId); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
+  const fetchOrders    = async () => { try { const { data, error } = await supabase.from('orders').select('*, tables(*)').eq('branch_id', branchId).order('created_at', { ascending: false }); if (error) throw error; setOrders(data);    } catch(e){ console.error(e); } };
+  const fetchRoles     = async () => { setRoles(['admin', 'manager', 'supervisor', 'waiter', 'kitchen', 'staff', 'customer']); };
+  const fetchCustomers = async () => { try { const { data, error } = await supabase.from('users').select('*').eq('role', 'customer'); if (error) throw error; setCustomers(data); } catch(e){ console.error(e); } };
 
   const handleSendPromo = async (e) => {
     e.preventDefault();
     try {
       const uids = selectedCustomer ? [selectedCustomer.id] : customers.map(c => c.id);
       
-      await api.post('/promo-campaign', {
-        user_ids: uids,
+      const promos = uids.map(uid => ({
+        user_id: uid,
         discount_percent: promoData.discount,
-        title: promoData.title,
-        message_template: promoData.message,
-        branch_id: parseInt(branchId)
-      });
+        branch_id: parseInt(branchId),
+        code: `PROMO-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+      }));
+
+      const { error } = await supabase.from('promo_codes').insert(promos);
+      if (error) throw error;
 
       alert('Campaign launched successfully!');
       setShowPromoModal(false);
@@ -153,40 +172,68 @@ export default function BranchDashboard() {
 
   const handleAddTable = async () => {
     if (!newTableNum) return;
-    try { await api.post(`/branches/${branchId}/tables?table_num=${newTableNum}`); setNewTableNum(''); fetchTables(); }
-    catch(e){ console.error(e); }
+    try { 
+      const { error } = await supabase.from('tables').insert([{ 
+        number: parseInt(newTableNum), 
+        branch_id: parseInt(branchId) 
+      }]);
+      if (error) throw error;
+      setNewTableNum(''); 
+      fetchTables(); 
+    } catch(e){ console.error(e); }
   };
 
   const handleBulkAddTables = async () => {
     if (!bulkCount || bulkCount <= 0) return;
-    try { await api.post(`/branches/${branchId}/tables-bulk?count=${bulkCount}`); setBulkCount(''); fetchTables(); }
-    catch(e){ console.error(e); }
+    try {
+      const maxNum = tables.length > 0 ? Math.max(...tables.map(t => t.number)) : 0;
+      const newTables = Array.from({ length: parseInt(bulkCount) }, (_, i) => ({
+        number: maxNum + i + 1,
+        branch_id: parseInt(branchId)
+      }));
+      const { error } = await supabase.from('tables').insert(newTables);
+      if (error) throw error;
+      setBulkCount(''); 
+      fetchTables(); 
+    } catch(e){ console.error(e); }
   };
 
   const handleDeleteTable = async (tableId) => {
     if (!window.confirm('Delete this table?')) return;
-    try { await api.delete(`/branches/${branchId}/tables/${tableId}`); fetchTables(); }
-    catch(e){ console.error(e); }
+    try { 
+      const { error } = await supabase.from('tables').delete().eq('id', tableId);
+      if (error) throw error;
+      fetchTables(); 
+    } catch(e){ console.error(e); }
   };
 
   const handlePrintQR = (table) => {
+    const canvas = document.getElementById(`qr-${table.id}`);
+    const qrDataUrl = canvas.toDataURL();
     const win = window.open('', '_blank');
     win.document.write(`
       <html><head><title>Print QR Table #${table.number}</title>
       <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;}img{width:300px;height:300px;}h1{font-size:2.5rem;margin-top:20px;}</style>
       </head><body onload="window.print();window.close();">
-      <img src="${table.qr_code_path}" /><h1>TABLE #${table.number}</h1>
+      <img src="${qrDataUrl}" /><h1>TABLE #${table.number}</h1>
       </body></html>`);
     win.document.close();
   };
 
   const handlePrintAllQRs = () => {
     const win = window.open('', '_blank');
+    let qrHtml = '';
+    tables.forEach(t => {
+      const canvas = document.getElementById(`qr-${t.id}`);
+      const qrDataUrl = canvas.toDataURL();
+      qrHtml += `<div class="item"><img src="${qrDataUrl}" /><h2>TABLE #${t.number}</h2></div>`;
+    });
+
     win.document.write(`
       <html><head><title>Print All QRs</title>
       <style>body{font-family:sans-serif;padding:20px;}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;}.item{display:flex;flex-direction:column;align-items:center;border:1px solid #eee;padding:20px;page-break-inside:avoid;}img{width:180px;height:180px;}h2{margin-top:10px;font-size:1.2rem;}</style>
       </head><body onload="window.print();window.close();">
-      <div class="grid">${tables.map(t => `<div class="item"><img src="${t.qr_code_path}" /><h2>TABLE #${t.number}</h2></div>`).join('')}</div>
+      <div class="grid">${qrHtml}</div>
       </body></html>`);
     win.document.close();
   };
@@ -194,15 +241,23 @@ export default function BranchDashboard() {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
     setIsUploading(true);
     try {
-      const res = await api.post('/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setNewMenuItem(prev => ({ ...prev, image_url: res.data.url }));
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data, error } = await supabase.storage
+        .from('menu-images')
+        .upload(fileName, file);
+      
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('menu-images')
+        .getPublicUrl(fileName);
+
+      setNewMenuItem(prev => ({ ...prev, image_url: publicUrl }));
     } catch (err) {
       console.error('Upload failed', err);
-      alert('Upload failed');
+      alert('Upload failed: ' + err.message);
     } finally {
       setIsUploading(false);
     }
@@ -211,7 +266,11 @@ export default function BranchDashboard() {
   const handleAddMenu = async (e) => {
     e.preventDefault();
     try {
-      await api.post(`/branches/${branchId}/menu`, { ...newMenuItem, branch_id: parseInt(branchId) });
+      const { error } = await supabase.from('menu_items').insert([{ 
+        ...newMenuItem, 
+        branch_id: parseInt(branchId) 
+      }]);
+      if (error) throw error;
       setNewMenuItem({ name: '', description: '', price: '', image_url: '' });
       setShowAddMenu(false);
       fetchMenu();
@@ -221,7 +280,13 @@ export default function BranchDashboard() {
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/users', { ...newEmployee, branch_id: parseInt(branchId) });
+      // Note: Full auth migration would use supabase.auth.admin.createUser
+      const { error } = await supabase.from('users').insert([{ 
+        username: newEmployee.username, 
+        role: newEmployee.role, 
+        branch_id: parseInt(branchId) 
+      }]);
+      if (error) throw error;
       setNewEmployee({ username: '', password: '', role: '', branch_id: branchId });
       setShowAddEmployee(false);
       fetchEmployees();
@@ -229,7 +294,11 @@ export default function BranchDashboard() {
   };
 
   const updateOrderStatus = async (orderId, status) => {
-    try { await api.patch(`/orders/${orderId}/status?status=${status}`); fetchOrders(); }
+    try { 
+      const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+      if (error) throw error;
+      fetchOrders(); 
+    }
     catch(e){ console.error(e); }
   };
 
@@ -330,11 +399,15 @@ export default function BranchDashboard() {
                   <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center">
                     <span className="font-syne text-base font-black text-[#0a0a0a]">#{table.number}</span>
                   </div>
-                  {table.qr_code_path && (
-                    <div className="p-2 bg-white border border-gray-100 rounded-xl shadow-sm">
-                      <img src={table.qr_code_path} alt="QR" className="w-24 h-24 rounded-lg block" />
-                    </div>
-                  )}
+                  <div className="p-2 bg-white border border-gray-100 rounded-xl shadow-sm">
+                    <QRCodeCanvas
+                      id={`qr-${table.id}`}
+                      value={`${window.location.origin}/table/${table.id}`}
+                      size={96}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  </div>
                   <button onClick={() => handlePrintQR(table)}
                     className="flex items-center gap-1.5 bg-[#0a0a0a] text-white font-syne font-bold text-[10px] uppercase tracking-wide px-4 py-2.5 rounded-xl hover:bg-gray-800 active:scale-95 transition-all w-full justify-center">
                     <Printer size={12} /> Print

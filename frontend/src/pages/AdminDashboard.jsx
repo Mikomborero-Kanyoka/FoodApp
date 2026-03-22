@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import { supabase } from '../supabaseClient';
 import { Plus, Users, Building, ChevronRight, Store, X, Zap } from 'lucide-react';
 
 /* ── Fonts + keyframes (injected once) ─────────────────────────── */
@@ -73,14 +73,15 @@ export default function AdminDashboard() {
     fetchRoles();
   }, []);
 
-  const fetchBranches  = async () => { try { const r = await api.get('/branches'); setBranches(r.data);  } catch(e){ console.error(e); } };
-  const fetchEmployees = async () => { try { const r = await api.get('/users');    setEmployees(r.data); } catch(e){ console.error(e); } };
-  const fetchRoles     = async () => { try { const r = await api.get('/roles');    setRoles(r.data);     } catch(e){ console.error(e); } };
+  const fetchBranches  = async () => { try { const { data, error } = await supabase.from('branches').select('*'); if (error) throw error; setBranches(data);  } catch(e){ console.error(e); } };
+  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*'); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
+  const fetchRoles     = async () => { setRoles(['admin', 'manager', 'supervisor', 'waiter', 'kitchen', 'staff', 'customer']); };
 
   const handleAddBranch = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/branches', newBranch);
+      const { error } = await supabase.from('branches').insert([newBranch]);
+      if (error) throw error;
       setNewBranch({ name: '', address: '' });
       setShowAddBranch(false);
       fetchBranches();
@@ -90,10 +91,15 @@ export default function AdminDashboard() {
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/users', {
-        ...newEmployee,
+      // In a real migration, this would involve creating a user in Supabase Auth
+      // and then updating the public.users table. 
+      // For now, we'll just insert into the public.users table for the UI demo.
+      const { error } = await supabase.from('users').insert([{
+        username: newEmployee.username,
+        role: newEmployee.role,
         branch_id: newEmployee.branch_id ? parseInt(newEmployee.branch_id) : null,
-      });
+      }]);
+      if (error) throw error;
       setNewEmployee({ username: '', password: '', role: '', branch_id: '' });
       setShowAddEmployee(false);
       fetchEmployees();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight, Chrome } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 // Inject Google Fonts + keyframes once
@@ -131,19 +131,33 @@ if (!document.querySelector('[data-login-styles]')) {
 }
 
 function Login() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showStaffLogin, setShowStaffLogin] = useState(false);
   const [showCustomerLogin, setShowCustomerLogin] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(window.location.search);
   const redirect = queryParams.get('redirect');
 
-  const token = localStorage.getItem('token');
-  const user = token ? JSON.parse(atob(token.split('.')[1])) : null;
-  const isCustomer = user?.role === 'customer';
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isCustomer = user?.user_metadata?.role === 'customer' || user?.app_metadata?.role === 'customer' || !!user;
 
   useEffect(() => {
     let scanner;
@@ -165,19 +179,19 @@ function Login() {
     e.preventDefault();
     setError('');
     try {
-      const params = new URLSearchParams();
-      params.append('username', username);
-      params.append('password', password);
-      const response = await api.post('/token', params, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      localStorage.setItem('token', response.data.access_token);
-      const payload = JSON.parse(atob(response.data.access_token.split('.')[1]));
-      const { role, branch_id } = payload;
+
+      if (error) throw error;
+
+      // Handle redirect logic based on user role (stored in metadata)
+      const role = data.user.user_metadata?.role;
+      const branch_id = data.user.user_metadata?.branch_id;
       
       if (redirect) {
         navigate(redirect);
-        window.location.reload(); // Ensure state is fully refreshed
         return;
       }
 
@@ -187,16 +201,25 @@ function Login() {
       else if (['manager', 'supervisor', 'staff'].includes(role)) navigate(`/branch/${branch_id || 1}`);
       else {
         setShowCustomerLogin(false);
-        window.location.reload(); 
       }
-    } catch {
-      setError('Invalid credentials. Please try again.');
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.');
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.reload();
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) setError(error.message);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
   };
 
   return (
@@ -275,7 +298,7 @@ function Login() {
             {isCustomer ? (
               <>
                 <h2 className="syne" style={{ fontSize: 26, fontWeight: 800, color: '#0a0a0a', marginBottom: 8 }}>
-                  Welcome, {user.sub}!
+                  Welcome, {user.email}!
                 </h2>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 24 }}>
                    <button onClick={() => navigate('/history')} className="pill-btn" style={{ background: '#0a0a0a', color: '#fff', fontSize: 10 }}>My Orders</button>
@@ -396,10 +419,10 @@ function Login() {
               <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <input
                   className="input-field"
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   autoCapitalize="off"
                 />
@@ -415,6 +438,14 @@ function Login() {
                   Sign In <ArrowRight size={18} />
                 </button>
               </form>
+              <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: '1px', background: 'var(--card-border)' }} />
+                <span style={{ fontSize: 12, color: '#999' }}>OR</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--card-border)' }} />
+              </div>
+              <button onClick={handleGoogleLogin} className="pill-btn ghost-btn" style={{ width: '100%', justifyContent: 'center' }}>
+                <Chrome size={18} /> Sign in with Google
+              </button>
             </div>
           )}
         </div>
