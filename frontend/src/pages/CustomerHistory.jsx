@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
+import { supabase } from '../supabaseClient';
+import { QRCodeCanvas } from 'qrcode.react';
 import { History, ArrowLeft, Receipt, ShoppingBag, Zap, ChevronRight, UserCircle, LogOut, Bell, X } from 'lucide-react';
 
 /* ── Fonts + keyframes (injected once) ─────────────────────────── */
@@ -83,32 +84,71 @@ export default function CustomerHistory() {
   useEffect(() => {
     fetchOrders();
     fetchNotifications();
-    const iv = setInterval(() => {
-      const hasActive = ordersRef.current.some(
-        o => !['completed', 'cancelled'].includes(o.status)
-      );
-      if (hasActive) fetchOrders(false);
-      fetchNotifications();
-    }, 10000);
-    return () => clearInterval(iv);
-  }, []);
+
+    const ordersSubscription = supabase
+      .channel('history_orders')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'orders',
+        filter: `user_id=eq.${user?.id}`
+      }, () => fetchOrders(false))
+      .subscribe();
+
+    const notifsSubscription = supabase
+      .channel('history_notifs')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'notifications',
+        filter: `user_id=eq.${user?.id}`
+      }, fetchNotifications)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersSubscription);
+      supabase.removeChannel(notifsSubscription);
+    };
+  }, [user?.id]);
 
   const fetchOrders = async (showLoading = true) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) { navigate('/login'); return; }
-      if (showLoading) setLoading(true);
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      setUser(payload);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate('/login'); return; }
       
-      // Safety check: only customers should see this page
-      if (!payload.role?.toLowerCase()?.includes('customer')) {
-        navigate('/login');
-        return;
-      }
+      const currentUser = session.user;
+      setUser(currentUser);
 
-      const res = await api.get('/my-orders');
-      setOrders(res.data);
+      if (showLoading) setLoading(true);
+
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (
+            quantity,
+            price_at_order,
+            menu_items (
+              name
+            )
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform for UI
+      const transformed = data.map(order => ({
+        ...order,
+        items: order.order_items.map(oi => ({
+          quantity: oi.quantity,
+          price_at_order: oi.price_at_order,
+          menu_item: oi.menu_items
+        }))
+      }));
+
+      setOrders(transformed);
     } catch (err) {
       console.error(err);
     } finally {
@@ -118,19 +158,34 @@ export default function CustomerHistory() {
 
   const fetchNotifications = async () => {
     try {
-      const res = await api.get('/my-notifications');
-      setNotifications(res.data);
+      if (!user?.id) return;
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setNotifications(data);
     } catch (err) { console.error(err); }
   };
 
   const markNotifRead = async (id) => {
     try {
-      await api.patch(`/notifications/${id}/read`);
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', id);
+      
+      if (error) throw error;
       fetchNotifications();
     } catch (err) { console.error(err); }
   };
 
-  const handleLogout = () => { localStorage.removeItem('token'); navigate('/login'); };
+  const handleLogout = async () => { 
+    await supabase.auth.signOut();
+    navigate('/login'); 
+  };
 
   /* ── Loading ────────────────────────────────────────────────── */
   if (loading) {
@@ -163,7 +218,7 @@ export default function CustomerHistory() {
                 Welcome back
               </p>
               <h1 className="font-syne text-2xl font-extrabold text-white leading-tight">
-                {user?.sub}
+                {user?.email}
               </h1>
             </div>
           </div>
@@ -200,7 +255,7 @@ export default function CustomerHistory() {
           </div>
           <div className="flex-1">
             <p className="font-syne text-xl font-extrabold text-[#0a0a0a] leading-snug">
-              {user?.sub}
+              {user?.email}
             </p>
             <p className="font-dm text-sm text-gray-400 mt-1">
               Gold Member ·{' '}
@@ -381,7 +436,7 @@ export default function CustomerHistory() {
           </div>
 
           <p className="font-syne text-xs font-semibold uppercase tracking-widest text-gray-600 mb-2">
-            Exclusive for {user?.sub}
+            Exclusive for {user?.email}
           </p>
           <h2 className="font-syne text-2xl font-black text-white mb-8">
             Special Deals

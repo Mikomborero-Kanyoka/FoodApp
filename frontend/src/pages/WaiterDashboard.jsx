@@ -74,9 +74,26 @@ export default function WaiterDashboard() {
   const [scanResult,       setScanResult]       = useState(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
 
-  const token   = localStorage.getItem('token');
-  const payload = token ? JSON.parse(atob(token.split('.')[1])) : {};
-  const isMgmt  = ['admin', 'manager', 'supervisor'].includes(payload.role);
+  const [user, setUser] = useState(null);
+  const [isMgmt, setIsMgmt] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        const role = session.user.user_metadata?.role || session.user.app_metadata?.role;
+        setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      const role = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+      setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   /* ── Polling ────────────────────────────────────────────────── */
   useEffect(() => {

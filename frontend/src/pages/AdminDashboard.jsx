@@ -67,11 +67,25 @@ export default function AdminDashboard() {
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [activeTab,       setActiveTab]       = useState('branches');
 
+  const [user, setUser] = useState(null);
+
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        const role = session.user.user_metadata?.role || session.user.app_metadata?.role;
+        if (role !== 'admin') {
+          navigate('/login');
+        }
+      } else {
+        navigate('/login');
+      }
+    });
+
     fetchBranches();
     fetchEmployees();
     fetchRoles();
-  }, []);
+  }, [navigate]);
 
   const fetchBranches  = async () => { try { const { data, error } = await supabase.from('branches').select('*'); if (error) throw error; setBranches(data);  } catch(e){ console.error(e); } };
   const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*'); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };

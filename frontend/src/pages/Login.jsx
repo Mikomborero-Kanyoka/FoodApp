@@ -483,10 +483,10 @@ function Login() {
               <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <input
                   className="input-field"
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
                 <input
@@ -501,6 +501,14 @@ function Login() {
                   Sign In <ArrowRight size={18} />
                 </button>
               </form>
+              <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: '1px', background: 'var(--card-border)' }} />
+                <span style={{ fontSize: 12, color: '#999' }}>OR</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--card-border)' }} />
+              </div>
+              <button onClick={handleGoogleLogin} className="pill-btn ghost-btn" style={{ width: '100%', justifyContent: 'center' }}>
+                <Chrome size={18} /> Sign in with Google
+              </button>
               
               <div style={{ marginTop: 20, textAlign: 'center' }}>
                 <p style={{ fontSize: 12, color: '#666' }}>Don't have an account? 

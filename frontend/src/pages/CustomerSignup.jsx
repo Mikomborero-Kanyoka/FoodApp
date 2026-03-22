@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
-import { UserPlus, ArrowRight, Zap, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { UserPlus, ArrowRight, Zap, ArrowLeft, ShieldCheck, Chrome } from 'lucide-react';
 
 /* ── Fonts (injected once) ─────────────────────────────────────── */
 if (!document.querySelector('[data-cs-fonts]')) {
@@ -50,7 +50,7 @@ const inputCls =
   'w-full px-5 py-4 bg-gray-100 rounded-2xl border-2 border-transparent focus:border-[#FFD600] outline-none font-dm text-base text-[#0a0a0a] transition-all placeholder:text-gray-400';
 
 export default function CustomerSignup() {
-  const [username, setUsername] = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const navigate = useNavigate();
@@ -59,18 +59,45 @@ export default function CustomerSignup() {
     e.preventDefault();
     setError('');
     try {
-      await api.post('/register/customer', { username, password, role: 'customer' });
-      const params = new URLSearchParams();
-      params.append('username', username);
-      params.append('password', password);
-      const loginRes = await api.post('/token', params, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      const { data, error: signupError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            role: 'customer'
+          }
+        }
       });
-      localStorage.setItem('token', loginRes.data.access_token);
+
+      if (signupError) throw signupError;
+      
+      // Also create a entry in our public.users table for profile data
+      if (data?.user) {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([{ 
+            id: data.user.id, 
+            role: 'customer',
+            username: email.split('@')[0]
+          }]);
+        
+        if (profileError) console.error('Profile creation error:', profileError);
+      }
+
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Signup failed. Username might be taken.');
+      setError(err.message || 'Signup failed.');
     }
+  };
+
+  const handleGoogleSignup = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) setError(error.message);
   };
 
   return (
@@ -112,16 +139,15 @@ export default function CustomerSignup() {
           <form onSubmit={handleSignup} className="space-y-5">
             <div className="space-y-2">
               <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
-                Username
+                Email Address
               </label>
               <input
-                type="text"
+                type="email"
                 className={inputCls}
-                placeholder="CoolCustomer01"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
+                placeholder="customer@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
                 required
-                autoCapitalize="off"
               />
             </div>
 
@@ -146,6 +172,16 @@ export default function CustomerSignup() {
               Create Account <ArrowRight size={18} strokeWidth={2.5} />
             </button>
           </form>
+
+          <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
+            <span style={{ fontSize: 12, color: '#999' }}>OR</span>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
+          </div>
+
+          <button onClick={handleGoogleSignup} className="signup-btn w-full bg-white text-[#0a0a0a] border border-gray-200 font-syne font-bold text-sm uppercase tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]">
+            <Chrome size={18} /> Sign up with Google
+          </button>
 
           {/* Footer links */}
           <div className="mt-8 pt-7 border-t border-gray-100 flex flex-col items-center gap-4">

@@ -87,20 +87,28 @@ export default function CustomerOrder() {
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromo,   setAppliedPromo]   = useState(null);
 
-  const token      = localStorage.getItem('token');
-  const user       = token ? JSON.parse(atob(token.split('.')[1])) : null;
-  const isCustomer = user?.role?.toLowerCase()?.includes('customer');
+  const [user,          setUser]          = useState(null);
+  const [isCustomer,    setIsCustomer]    = useState(false);
 
-  console.log('--- DEBUG CUSTOMER DASHBOARD ---');
-  console.log('Token exists:', !!token);
-  console.log('User object:', user);
-  console.log('Role:', user?.role);
-  console.log('isCustomer:', isCustomer);
-  console.log('--------------------------------');
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        setIsCustomer(session.user.user_metadata?.role === 'customer' || session.user.app_metadata?.role === 'customer' || true);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setIsCustomer(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => { 
     fetchTableAndMenu(); 
-    fetchNotifications(); 
+    if (user?.id) fetchNotifications(); 
 
     const ordersSubscription = supabase
       .channel('customer_order')
@@ -116,19 +124,19 @@ export default function CustomerOrder() {
       })
       .subscribe();
 
-    const notifsSubscription = supabase
+    const notifsSubscription = user?.id ? supabase
       .channel('customer_notifs')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'notifications',
-        filter: `user_id=eq.${user?.id}`
+        filter: `user_id=eq.${user.id}`
       }, fetchNotifications)
-      .subscribe();
+      .subscribe() : null;
 
     return () => {
       supabase.removeChannel(ordersSubscription);
-      supabase.removeChannel(notifsSubscription);
+      if (notifsSubscription) supabase.removeChannel(notifsSubscription);
     };
   }, [tableId, activeOrder?.id, user?.id]);
 
@@ -389,7 +397,7 @@ export default function CustomerOrder() {
             <h1 className="font-syne text-2xl font-extrabold text-white leading-tight">FoodApp</h1>
             {isCustomer ? (
               <p className="font-syne text-xs font-semibold uppercase tracking-widest text-[#FFD600] mt-0.5">
-                Hi, {user.sub || 'Customer'}!
+                Hi, {user?.email || 'Customer'}!
               </p>
             ) : (
               <p className="font-syne text-xs font-semibold uppercase tracking-widest text-gray-500 mt-0.5">
