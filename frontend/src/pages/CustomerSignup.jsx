@@ -53,11 +53,13 @@ export default function CustomerSignup() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
+  const [success,  setSuccess]  = useState(false);
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess(false);
     try {
       const { data, error: signupError } = await supabase.auth.signUp({
         email,
@@ -84,7 +86,11 @@ export default function CustomerSignup() {
         if (profileError) console.error('Profile creation error:', profileError);
       }
 
-      navigate('/');
+      if (data?.session) {
+        navigate('/');
+      } else {
+        setSuccess(true);
+      }
     } catch (err) {
       setError(err.message || 'Signup failed.');
     }
@@ -136,42 +142,63 @@ export default function CustomerSignup() {
             </div>
           )}
 
-          <form onSubmit={handleSignup} className="space-y-5">
-            <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
-                Email Address
-              </label>
-              <input
-                type="email"
-                className={inputCls}
-                placeholder="customer@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
+          {/* Success message */}
+          {success && (
+            <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 text-green-600 font-syne font-bold text-sm uppercase tracking-wide mb-6">
+              Account created! Please check your email for a confirmation link.
             </div>
+          )}
 
-            <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
-                Password
-              </label>
-              <input
-                type="password"
-                className={inputCls}
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
+          {!success ? (
+            <form onSubmit={handleSignup} className="space-y-5">
+              <div className="space-y-2">
+                <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  className={inputCls}
+                  placeholder="customer@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  className={inputCls}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="signup-btn w-full bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-base uppercase tracking-wide py-5 rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(255,214,0,.3)] mt-2"
+              >
+                Create Account <ArrowRight size={18} strokeWidth={2.5} />
+              </button>
+            </form>
+          ) : (
+            <div className="text-center py-6">
+              <p className="font-dm text-gray-500 mb-8">
+                Once confirmed, you can sign in and start ordering!
+              </p>
+              <Link
+                to="/login"
+                className="signup-btn inline-block w-full bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-base uppercase tracking-wide py-5 rounded-2xl text-center shadow-[0_4px_20px_rgba(255,214,0,.3)]"
+              >
+                Go to Sign In
+              </Link>
             </div>
-
-            <button
-              type="submit"
-              className="signup-btn w-full bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-base uppercase tracking-wide py-5 rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(255,214,0,.3)] mt-2"
-            >
-              Create Account <ArrowRight size={18} strokeWidth={2.5} />
-            </button>
-          </form>
+          )}
 
           <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />

@@ -203,7 +203,11 @@ function Login() {
         setShowCustomerLogin(false);
       }
     } catch (err) {
-      setError(err.message || 'Invalid credentials. Please try again.');
+      if (err.message?.includes('Invalid login credentials') || err.status === 400) {
+        setError('Invalid credentials or email not confirmed. Please check your email for a verification link.');
+      } else {
+        setError(err.message || 'Login failed. Please try again.');
+      }
     }
   };
 
