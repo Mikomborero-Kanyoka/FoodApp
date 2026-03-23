@@ -85,11 +85,11 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [branches,        setBranches]        = useState([]);
   const [employees,       setEmployees]       = useState([]);
-  const [roles,           setRoles]           = useState([]);
   const [newBranch,       setNewBranch]       = useState({ name: '', address: '' });
-  const [newEmployee,     setNewEmployee]     = useState({ email: '', role: '', branch_id: '' });
   const [showAddBranch,   setShowAddBranch]   = useState(false);
-  const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [showAssignBranch, setShowAssignBranch] = useState(false);
+  const [selectedStaff,   setSelectedStaff]   = useState(null);
+  const [assignBranchId,  setAssignBranchId]  = useState('');
   const [activeTab,       setActiveTab]       = useState('branches');
 
   const [user, setUser] = useState(null);
@@ -109,12 +109,10 @@ export default function AdminDashboard() {
 
     fetchBranches();
     fetchEmployees();
-    fetchRoles();
   }, [navigate]);
 
   const fetchBranches  = async () => { try { const { data, error } = await supabase.from('branches').select('*'); if (error) throw error; setBranches(data);  } catch(e){ console.error(e); } };
-  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*'); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
-  const fetchRoles     = async () => { setRoles(['admin', 'manager', 'supervisor', 'waiter', 'kitchen', 'staff', 'customer']); };
+  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*').neq('role', 'customer'); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
 
   const handleAddBranch = async (e) => {
     e.preventDefault();
@@ -127,47 +125,30 @@ export default function AdminDashboard() {
     } catch(err){ console.error(err); }
   };
 
-  const handleAddEmployee = async (e) => {
+  const handleAssignBranch = async (e) => {
     e.preventDefault();
+    if (!selectedStaff || !assignBranchId) return;
+
     try {
-      // 1. Find the user by email in the public.users table (populated via signup)
-      // Note: This requires the staff member to have already created a customer account
-      const { data: userData, error: fetchError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', newEmployee.email.trim()) 
-        .maybeSingle();
-
-      if (fetchError) throw fetchError;
-      
-      let targetId = userData?.id;
-
-      // If not found in users table, they might not have a profile but exist in Auth
-      // However, we can't search Auth easily without Admin API.
-      // So we assume they signed up and have a profile.
-      
-      if (!targetId) {
-        alert('User with this email/username not found. Please ensure they have signed up first.');
-        return;
-      }
-
       const { error } = await supabase
         .from('users')
         .update({
-          role: newEmployee.role,
-          branch_id: newEmployee.branch_id ? parseInt(newEmployee.branch_id) : null,
+          branch_id: parseInt(assignBranchId),
+          // If they were pending, move them to 'staff' so manager can then assign specific role
+          role: selectedStaff.role === 'pending_staff' ? 'staff' : selectedStaff.role
         })
-        .eq('id', targetId);
+        .eq('id', selectedStaff.id);
 
       if (error) throw error;
 
-      setNewEmployee({ email: '', role: '', branch_id: '' });
-      setShowAddEmployee(false);
+      setShowAssignBranch(false);
+      setSelectedStaff(null);
+      setAssignBranchId('');
       fetchEmployees();
-      alert('Staff member onboarded successfully!');
+      alert('Branch assigned successfully!');
     } catch(err){ 
       console.error(err); 
-      alert('Failed to onboard staff: ' + err.message);
+      alert('Failed to assign branch: ' + err.message);
     }
   };
 
@@ -271,105 +252,129 @@ export default function AdminDashboard() {
 
         {/* ── EMPLOYEES TAB ───────────────────────────────────── */}
         {activeTab === 'employees' && (
-          <div className="anim-2 space-y-5">
+          <div className="anim-2 space-y-10">
 
-            {/* Section header */}
-            <div className="flex items-center justify-between px-1 pt-2">
-              <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">
-                Active Personnel
-              </h2>
-              <button
-                onClick={() => setShowAddEmployee(true)}
-                className="flex items-center gap-2 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-sm uppercase tracking-wide px-6 py-3.5 rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(255,214,0,.4)] active:scale-95 transition-all"
-              >
-                <Plus size={18} strokeWidth={2.5} /> Add Employee
-              </button>
-            </div>
-
-            {/* Employee cards */}
-            <div className="space-y-3">
-              {employees.map((emp, idx) => (
-                <div
-                  key={emp.id}
-                  className="emp-card bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6"
-                  style={{ animationDelay: `${idx * 0.04}s` }}
-                >
-                  {/* yellow left bar */}
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
-
-                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
-                    <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">
-                      {emp.username}
-                    </p>
-                    <p className="font-dm text-sm text-gray-400 mt-0.5">
-                      {branches.find(b => b.id === emp.branch_id)?.name || 'Global Admin'}
-                    </p>
-                  </div>
-
-                  <span className="font-syne text-xs font-bold uppercase tracking-wide bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full shrink-0">
-                    {emp.role}
-                  </span>
+            {/* Applications Section */}
+            {employees.filter(e => e.role === 'pending_staff').length > 0 && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between px-1 pt-2">
+                  <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">
+                    Staff Applications
+                  </h2>
                 </div>
-              ))}
+                <div className="space-y-3">
+                  {employees.filter(e => e.role === 'pending_staff').map((emp, idx) => (
+                    <div
+                      key={emp.id}
+                      className="emp-card bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6"
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
+                      <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
+                        <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">
+                          {emp.full_name || emp.username}
+                        </p>
+                        <p className="font-dm text-sm text-gray-400 mt-0.5">
+                          {emp.email}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedStaff(emp); setShowAssignBranch(true); }}
+                        className="bg-[#0a0a0a] text-white font-syne font-bold text-xs uppercase tracking-wide px-5 py-3 rounded-xl hover:bg-gray-800 transition-all active:scale-95"
+                      >
+                        Assign Branch
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active Personnel Section */}
+            <div className="space-y-5">
+              <div className="flex items-center justify-between px-1 pt-2">
+                <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">
+                  Active Personnel
+                </h2>
+              </div>
+
+              {/* Employee cards */}
+              <div className="space-y-3">
+                {employees.filter(e => e.role !== 'pending_staff').map((emp, idx) => (
+                  <div
+                    key={emp.id}
+                    className="emp-card bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6"
+                    style={{ animationDelay: `${idx * 0.04}s` }}
+                  >
+                    {/* yellow left bar */}
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
+
+                    <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
+                      <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">
+                        {emp.full_name || emp.username}
+                      </p>
+                      <p className="font-dm text-sm text-gray-400 mt-0.5">
+                        {branches.find(b => b.id === emp.branch_id)?.name || 'Needs Assignment'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="font-syne text-xs font-bold uppercase tracking-wide bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full shrink-0">
+                        {emp.role}
+                      </span>
+                      <button
+                        onClick={() => { setSelectedStaff(emp); setAssignBranchId(emp.branch_id || ''); setShowAssignBranch(true); }}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                      >
+                        <Building size={16} className="text-gray-400" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── ADD EMPLOYEE MODAL ──────────────────────────────────── */}
-      {showAddEmployee && (
+      {/* ── ASSIGN BRANCH MODAL ──────────────────────────────────── */}
+      {showAssignBranch && (
         <Modal
-          onClose={() => setShowAddEmployee(false)}
-          title="Onboard Staff"
-          icon={<Users size={18} color="#0a0a0a" />}
+          onClose={() => setShowAssignBranch(false)}
+          title="Assign Branch"
+          icon={<Building size={18} color="#0a0a0a" />}
         >
-          <form onSubmit={handleAddEmployee} className="space-y-5">
-            <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">User Email / Username</label>
-              <input
-                type="text"
-                className={inputCls}
-                placeholder="e.g. john@example.com"
-                value={newEmployee.email}
-                onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                required
-              />
-              <p className="text-[10px] text-gray-400 italic">User must have signed up for an account first.</p>
+          <form onSubmit={handleAssignBranch} className="space-y-5">
+            <div className="p-4 bg-gray-50 rounded-2xl border border-black/[0.04]">
+              <p className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Target Personnel</p>
+              <p className="font-syne text-base font-extrabold text-[#0a0a0a]">{selectedStaff?.full_name || selectedStaff?.username}</p>
+              <p className="font-dm text-xs text-gray-400">{selectedStaff?.email}</p>
             </div>
 
             <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Assigned Role</label>
+              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Select Branch</label>
               <select
                 className={selectCls}
-                value={newEmployee.role}
-                onChange={e => setNewEmployee({ ...newEmployee, role: e.target.value })}
+                value={assignBranchId}
+                onChange={e => setAssignBranchId(e.target.value)}
                 required
               >
-                <option value="">Select role…</option>
-                {roles.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Branch</label>
-              <select
-                className={selectCls}
-                value={newEmployee.branch_id}
-                onChange={e => setNewEmployee({ ...newEmployee, branch_id: e.target.value })}
-              >
-                <option value="">None (Global Admin)</option>
+                <option value="">Choose a branch…</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+              <p className="text-[10px] text-gray-400 italic">Assigning a branch allows the branch manager to set their role.</p>
             </div>
 
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setShowAddEmployee(false)}
+                onClick={() => setShowAssignBranch(false)}
                 className="flex-1 py-4 bg-gray-100 text-[#0a0a0a] font-syne font-bold uppercase text-sm rounded-2xl hover:bg-gray-200 active:scale-95 transition-all"
               >
                 Cancel
@@ -378,7 +383,7 @@ export default function AdminDashboard() {
                 type="submit"
                 className="flex-1 py-4 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold uppercase text-sm rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 active:scale-95 transition-all"
               >
-                Promote to Staff
+                Confirm Assignment
               </button>
             </div>
           </form>

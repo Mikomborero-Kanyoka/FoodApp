@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import CustomerSignup from './pages/CustomerSignup';
+import StaffSignup from './pages/StaffSignup';
 import CustomerHistory from './pages/CustomerHistory';
 import AdminDashboard from './pages/AdminDashboard';
 import BranchDashboard from './pages/BranchDashboard';
@@ -39,6 +40,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<CustomerSignup />} />
+          <Route path="/staff/signup" element={<StaffSignup />} />
           <Route path="/history" element={<CustomerHistory />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/branch/:branchId" element={<BranchDashboard />} />

@@ -475,6 +475,16 @@ function Login() {
                   Sign In <ArrowRight size={18} />
                 </button>
               </form>
+              <div style={{ marginTop: 20, textAlign: 'center' }}>
+                <p style={{ fontSize: 12, color: '#666' }}>New staff member? 
+                  <button 
+                    onClick={() => navigate('/staff/signup')}
+                    style={{ background: 'none', border: 'none', color: '#0a0a0a', fontWeight: 800, cursor: 'pointer', marginLeft: 4 }}
+                  >
+                    Register Here
+                  </button>
+                </p>
+              </div>
               <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, height: '1px', background: 'var(--card-border)' }} />
                 <span style={{ fontSize: 12, color: '#999' }}>OR</span>

@@ -109,9 +109,10 @@ export default function BranchDashboard() {
   const [newTableNum,     setNewTableNum]     = useState('');
   const [bulkCount,       setBulkCount]       = useState('');
   const [newMenuItem,     setNewMenuItem]     = useState({ name: '', description: '', price: '', image_url: '' });
-  const [newEmployee,     setNewEmployee]     = useState({ email: '', role: '' });
   const [showAddMenu,     setShowAddMenu]     = useState(false);
-  const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [showRoleModal,   setShowRoleModal]   = useState(false);
+  const [selectedStaff,   setSelectedStaff]   = useState(null);
+  const [newRole,         setNewRole]         = useState('');
   const [isUploading,     setIsUploading]     = useState(false);
 
   const [showPromoModal,  setShowPromoModal]  = useState(false);
@@ -294,42 +295,25 @@ export default function BranchDashboard() {
     } catch(e){ console.error(e); }
   };
 
-  const handleAddEmployee = async (e) => {
+  const handleUpdateRole = async (e) => {
     e.preventDefault();
+    if (!selectedStaff || !newRole) return;
     try {
-      // 1. Find the user by email in the public.users table (populated via signup)
-      const { data: userData, error: fetchError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', newEmployee.email.trim()) 
-        .maybeSingle();
-
-      if (fetchError) throw fetchError;
-      
-      let targetId = userData?.id;
-
-      if (!targetId) {
-        alert('User with this email/username not found. Please ensure they have signed up first.');
-        return;
-      }
-
       const { error } = await supabase
         .from('users')
-        .update({
-          role: newEmployee.role,
-          branch_id: parseInt(branchId),
-        })
-        .eq('id', targetId);
+        .update({ role: newRole })
+        .eq('id', selectedStaff.id);
 
       if (error) throw error;
-
-      setNewEmployee({ email: '', role: '' });
-      setShowAddEmployee(false);
+      
+      setShowRoleModal(false);
+      setSelectedStaff(null);
+      setNewRole('');
       fetchEmployees();
-      alert('Staff member onboarded successfully!');
+      alert('Role updated successfully!');
     } catch(err){ 
       console.error(err); 
-      alert('Failed to onboard staff: ' + err.message);
+      alert('Failed to update role: ' + err.message);
     }
   };
 
@@ -577,32 +561,60 @@ export default function BranchDashboard() {
 
         {/* ══ EMPLOYEES ═══════════════════════════════════════════ */}
         {activeTab === 'employees' && (
-          <div className="anim-2 space-y-5">
-            <div className="flex items-center justify-between px-1 pt-2">
-              <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">Branch Staff</h2>
-              {isMgmt && (
-                <button onClick={() => setShowAddEmployee(true)}
-                  className="flex items-center gap-2 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-sm uppercase tracking-wide px-6 py-3.5 rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 active:scale-95 transition-all">
-                  <Plus size={18} strokeWidth={2.5} /> Add Staff
-                </button>
-              )}
-            </div>
-            <div className="space-y-3">
-              {employees.map((emp, idx) => (
-                <div key={emp.id} className="hover-lift bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6" style={{ animationDelay: `${idx * 0.04}s` }}>
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
-                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
-                    <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">{emp.username}</p>
-                    <p className="font-dm text-sm text-gray-400 mt-0.5">Branch #{branchId}</p>
-                  </div>
-                  <span className="font-syne text-xs font-bold uppercase tracking-wide bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full shrink-0">
-                    {emp.role}
-                  </span>
+          <div className="anim-2 space-y-10">
+            
+            {/* Needs Role Section */}
+            {employees.filter(e => e.role === 'staff').length > 0 && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between px-1 pt-2">
+                  <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">New Personnel</h2>
                 </div>
-              ))}
+                <div className="space-y-3">
+                  {employees.filter(e => e.role === 'staff').map((emp, idx) => (
+                    <div key={emp.id} className="hover-lift bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
+                      <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
+                        <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">{emp.full_name || emp.username}</p>
+                        <p className="font-dm text-sm text-gray-400 mt-0.5">{emp.email}</p>
+                      </div>
+                      <button onClick={() => { setSelectedStaff(emp); setNewRole(''); setShowRoleModal(true); }}
+                        className="bg-[#0a0a0a] text-white font-syne font-bold text-xs uppercase tracking-wide px-5 py-3 rounded-xl hover:bg-gray-800 transition-all active:scale-95">
+                        Assign Role
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active Personnel Section */}
+            <div className="space-y-5">
+              <div className="flex items-center justify-between px-1 pt-2">
+                <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">Branch Staff</h2>
+              </div>
+              <div className="space-y-3">
+                {employees.filter(e => e.role !== 'staff').map((emp, idx) => (
+                  <div key={emp.id} className="hover-lift bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6" style={{ animationDelay: `${idx * 0.04}s` }}>
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
+                    <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
+                      <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">{emp.full_name || emp.username}</p>
+                      <p className="font-dm text-sm text-gray-400 mt-0.5">{emp.role.toUpperCase()} • Branch #{branchId}</p>
+                    </div>
+                    {isMgmt && (
+                      <button onClick={() => { setSelectedStaff(emp); setNewRole(emp.role); setShowRoleModal(true); }}
+                        className="p-3 hover:bg-gray-100 rounded-2xl transition-all">
+                        <Zap size={18} className="text-gray-400" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -689,32 +701,35 @@ export default function BranchDashboard() {
         </Modal>
       )}
 
-      {/* ── ADD EMPLOYEE MODAL ──────────────────────────────────── */}
-      {showAddEmployee && (
-        <Modal onClose={() => setShowAddEmployee(false)} title="Hire Staff" icon={<Users size={18} color="#0a0a0a" />}>
-          <form onSubmit={handleAddEmployee} className="space-y-5">
-            <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">User Email / Username</label>
-              <input className={inputCls} placeholder="e.g. jane@example.com"
-                value={newEmployee.email} onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })} required />
-              <p className="text-[10px] text-gray-400 italic">User must have signed up for an account first.</p>
+      {/* ── UPDATE ROLE MODAL ───────────────────────────────────── */}
+      {showRoleModal && (
+        <Modal onClose={() => setShowRoleModal(false)} title="Manage Role" icon={<Users size={18} color="#0a0a0a" />}>
+          <form onSubmit={handleUpdateRole} className="space-y-5">
+            <div className="p-4 bg-gray-50 rounded-2xl border border-black/[0.04]">
+              <p className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Target Personnel</p>
+              <p className="font-syne text-base font-extrabold text-[#0a0a0a]">{selectedStaff?.full_name || selectedStaff?.username}</p>
+              <p className="font-dm text-xs text-gray-400">{selectedStaff?.email}</p>
             </div>
+
             <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Role</label>
-              <select className={selectCls} value={newEmployee.role}
-                onChange={e => setNewEmployee({ ...newEmployee, role: e.target.value })} required>
-                <option value="">Select role…</option>
-                {roles.map(r => <option key={r} value={r}>{r}</option>)}
+              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Assign Role</label>
+              <select className={selectCls} value={newRole}
+                onChange={e => setNewRole(e.target.value)} required>
+                <option value="">Select a role…</option>
+                {roles.filter(r => !['admin', 'customer', 'pending_staff', 'staff'].includes(r)).map(r => (
+                  <option key={r} value={r}>{r.toUpperCase()}</option>
+                ))}
               </select>
             </div>
+            
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setShowAddEmployee(false)}
+              <button type="button" onClick={() => setShowRoleModal(false)}
                 className="flex-1 py-4 bg-gray-100 text-[#0a0a0a] font-syne font-bold uppercase text-sm rounded-2xl hover:bg-gray-200 active:scale-95 transition-all">
                 Cancel
               </button>
               <button type="submit"
                 className="flex-1 py-4 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold uppercase text-sm rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 active:scale-95 transition-all">
-                Promote to Staff
+                Update Role
               </button>
             </div>
           </form>
