@@ -53,6 +53,31 @@ const inputCls =
 const selectCls =
   'w-full px-5 py-4 bg-gray-100 rounded-2xl border-2 border-transparent focus:border-[#FFD600] outline-none font-syne font-bold text-sm uppercase text-[#0a0a0a] transition-all';
 
+/* ── Modal wrapper ────────────────────────────────────────────── */
+const Modal = ({ onClose, title, icon, children }) => (
+  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+    <div className="modal-in bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-black/[0.06] overflow-hidden">
+      {/* Modal header */}
+      <div className="bg-[#0a0a0a] px-8 py-7 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#FFD600] flex items-center justify-center shrink-0">
+            {icon}
+          </div>
+          <h2 className="font-syne text-xl font-extrabold text-white">{title}</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all active:scale-95"
+        >
+          <X size={18} />
+        </button>
+      </div>
+      {/* Modal body */}
+      <div className="px-8 py-8">{children}</div>
+    </div>
+  </div>
+);
+
 /* ══════════════════════════════════════════════════════════════════
    Component
 ══════════════════════════════════════════════════════════════════ */
@@ -119,31 +144,6 @@ export default function AdminDashboard() {
       fetchEmployees();
     } catch(err){ console.error(err); }
   };
-
-  /* ── Modal wrapper ────────────────────────────────────────────── */
-  const Modal = ({ onClose, title, icon, children }) => (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-      <div className="modal-in bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-black/[0.06] overflow-hidden">
-        {/* Modal header */}
-        <div className="bg-[#0a0a0a] px-8 py-7 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FFD600] flex items-center justify-center shrink-0">
-              {icon}
-            </div>
-            <h2 className="font-syne text-xl font-extrabold text-white">{title}</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all active:scale-95"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        {/* Modal body */}
-        <div className="px-8 py-8">{children}</div>
-      </div>
-    </div>
-  );
 
   /* ── Main ───────────────────────────────────────────────────── */
   return (

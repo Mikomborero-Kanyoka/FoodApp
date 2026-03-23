@@ -625,28 +625,31 @@ export default function BranchDashboard() {
               </div>
 
               {/* Live image preview */}
-              {newMenuItem.image_url ? (
-                <div className="relative mt-2 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
-                  <img
-                    src={newMenuItem.image_url}
-                    alt="Preview"
-                    className="w-full h-44 object-cover"
-                    onError={e => { e.target.style.display = 'none'; }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setNewMenuItem({ ...newMenuItem, image_url: '' })}
-                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-all"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-2 rounded-2xl border-2 border-dashed border-gray-200 h-24 flex items-center justify-center gap-2 text-gray-300">
-                  <ImageIcon size={20} />
-                  <span className="font-syne text-xs font-bold uppercase tracking-wide">Preview appears here</span>
-                </div>
-              )}
+              <div key="image-preview-area">
+                {newMenuItem.image_url ? (
+                  <div key="preview-img-container" className="relative mt-2 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
+                    <img
+                      key={newMenuItem.image_url}
+                      src={newMenuItem.image_url}
+                      alt="Preview"
+                      className="w-full h-44 object-cover"
+                      onError={e => { e.target.style.display = 'none'; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewMenuItem({ ...newMenuItem, image_url: '' })}
+                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-all"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div key="preview-placeholder" className="mt-2 rounded-2xl border-2 border-dashed border-gray-200 h-24 flex items-center justify-center gap-2 text-gray-300">
+                    <ImageIcon size={20} />
+                    <span className="font-syne text-xs font-bold uppercase tracking-wide">Preview appears here</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 pt-2">
