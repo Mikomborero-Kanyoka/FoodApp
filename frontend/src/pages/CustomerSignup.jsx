@@ -86,11 +86,11 @@ export default function CustomerSignup() {
       if (data?.user) {
         const { error: profileError } = await supabase
           .from('users')
-          .insert([{ 
+          .upsert([{ 
             id: data.user.id, 
             role: 'customer',
             username: username
-          }]);
+          }], { onConflict: 'id' });
         
         if (profileError) console.error('Profile creation error:', profileError);
       }

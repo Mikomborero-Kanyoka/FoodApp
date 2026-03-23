@@ -85,11 +85,11 @@ export default function StaffSignup() {
       if (data?.user) {
         const { error: profileError } = await supabase
           .from('users')
-          .insert([{ 
+          .upsert([{ 
             id: data.user.id, 
             role: 'pending_staff',
             username: username
-          }]);
+          }], { onConflict: 'id' });
         
         if (profileError) console.error('Profile creation error:', profileError);
       }
