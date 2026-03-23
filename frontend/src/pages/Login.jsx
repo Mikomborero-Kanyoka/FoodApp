@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { fetchUserProfile, STAFF_SIGNUP_ROLE } from '../authProfile';
 import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight, Chrome, RefreshCw } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -140,7 +139,6 @@ function Login() {
   const [isScanning, setIsScanning] = useState(false);
   const [facingMode, setFacingMode] = useState('environment'); // 'user' or 'environment'
   const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(window.location.search);
   const redirect = queryParams.get('redirect');
@@ -150,32 +148,17 @@ function Login() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setUser(session.user);
-        fetchUserProfile(session.user.id)
-          .then(setUserProfile)
-          .catch((profileError) => console.error('Failed to load user profile', profileError));
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) {
-        try {
-          const profile = await fetchUserProfile(session.user.id);
-          setUserProfile(profile);
-        } catch (profileError) {
-          console.error('Failed to load user profile', profileError);
-          setUserProfile(null);
-        }
-      } else {
-        setUserProfile(null);
-      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const effectiveRole = userProfile?.role || user?.user_metadata?.role || user?.app_metadata?.role;
-  const isCustomer = effectiveRole === 'customer' || (!!user && !effectiveRole);
+  const isCustomer = user?.user_metadata?.role === 'customer' || user?.app_metadata?.role === 'customer' || !!user;
 
   useEffect(() => {
     let html5QrCode;
@@ -225,9 +208,9 @@ function Login() {
 
       if (error) throw error;
 
-      const profile = await fetchUserProfile(data.user.id);
-      const role = profile?.role || data.user.user_metadata?.role;
-      const branchId = profile?.branch_id || data.user.user_metadata?.branch_id;
+      // Handle redirect logic based on user role (stored in metadata)
+      const role = data.user.user_metadata?.role;
+      const branch_id = data.user.user_metadata?.branch_id;
       
       if (redirect) {
         navigate(redirect);
@@ -235,14 +218,9 @@ function Login() {
       }
 
       if (role === 'admin') navigate('/admin');
-      else if (role === 'kitchen' && branchId) navigate(`/kitchen/${branchId}`);
-      else if (role === 'waiter' && branchId) navigate(`/waiter/${branchId}`);
-      else if (['manager', 'supervisor'].includes(role) && branchId) navigate(`/branch/${branchId}`);
-      else if (role === STAFF_SIGNUP_ROLE && !branchId) {
-        setError('Your staff account is waiting for admin branch assignment.');
-      } else if (role === STAFF_SIGNUP_ROLE && branchId) {
-        setError('Your branch is assigned. Please wait for your manager to assign your working role.');
-      }
+      else if (role === 'kitchen') navigate(`/kitchen/${branch_id || 1}`);
+      else if (role === 'waiter') navigate(`/waiter/${branch_id || 1}`);
+      else if (['manager', 'supervisor', 'staff'].includes(role)) navigate(`/branch/${branch_id || 1}`);
       else {
         setShowCustomerLogin(false);
       }
@@ -505,17 +483,6 @@ function Login() {
               <button onClick={handleGoogleLogin} className="pill-btn ghost-btn" style={{ width: '100%', justifyContent: 'center' }}>
                 <Chrome size={18} /> Sign in with Google
               </button>
-              <div style={{ marginTop: 18, textAlign: 'center' }}>
-                <p style={{ fontSize: 12, color: '#666' }}>
-                  New team member?
-                  <button
-                    onClick={() => navigate('/signup?mode=staff')}
-                    style={{ background: 'none', border: 'none', color: '#0a0a0a', fontWeight: 800, cursor: 'pointer', marginLeft: 4 }}
-                  >
-                    Create staff account
-                  </button>
-                </p>
-              </div>
             </div>
           )}
         </div>

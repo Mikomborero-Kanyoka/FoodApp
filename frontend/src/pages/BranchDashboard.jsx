@@ -1,11 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { getCurrentUserContext, MANAGER_ASSIGNABLE_ROLES, subscribeToUserContext } from '../authProfile';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Plus, Utensils, Printer, Users, ShoppingBag,
-  Clock, X, Zap, LayoutDashboard, Upload, ImageIcon, ShieldCheck,
+  Clock, X, Zap, LayoutDashboard, Upload, ImageIcon,
 } from 'lucide-react';
 
 /* ── Fonts + keyframes (injected once) ─────────────────────────── */
@@ -106,43 +105,42 @@ export default function BranchDashboard() {
   const [employees,       setEmployees]       = useState([]);
   const [customers,       setCustomers]       = useState([]);
   const [orders,          setOrders]          = useState([]);
+  const [roles,           setRoles]           = useState([]);
   const [newTableNum,     setNewTableNum]     = useState('');
   const [bulkCount,       setBulkCount]       = useState('');
   const [newMenuItem,     setNewMenuItem]     = useState({ name: '', description: '', price: '', image_url: '' });
+  const [newEmployee,     setNewEmployee]     = useState({ email: '', role: '' });
   const [showAddMenu,     setShowAddMenu]     = useState(false);
-  const [showRoleModal,   setShowRoleModal]   = useState(false);
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [isUploading,     setIsUploading]     = useState(false);
 
   const [showPromoModal,  setShowPromoModal]  = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [promoData,       setPromoData]       = useState({ discount: 10, title: 'Special Discount!', message: 'Use code {CODE} for {PERCENT}% off your next order!' });
 
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [selectedRole, setSelectedRole] = useState('');
+  const [user, setUser] = useState(null);
   const [isMgmt, setIsMgmt] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    getCurrentUserContext()
-      .then((context) => {
-        if (!mounted) return;
-        setIsMgmt(['admin', 'manager', 'supervisor'].includes(context?.role));
-      })
-      .catch((error) => console.error('Failed to load branch user context', error));
-
-    const { data: { subscription } } = subscribeToUserContext((context) => {
-      setIsMgmt(['admin', 'manager', 'supervisor'].includes(context?.role));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        const role = session.user.user_metadata?.role || session.user.app_metadata?.role;
+        setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+      }
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      const role = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+      setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    fetchTables(); fetchMenu(); fetchEmployees(); fetchOrders(); fetchCustomers();
+    fetchTables(); fetchMenu(); fetchEmployees(); fetchOrders(); fetchRoles(); fetchCustomers();
     
     // Subscribe to real-time changes
     const tablesSubscription = supabase
@@ -163,8 +161,9 @@ export default function BranchDashboard() {
 
   const fetchTables    = async () => { try { const { data, error } = await supabase.from('tables').select('*').eq('branch_id', branchId).order('number'); if (error) throw error; setTables(data);    } catch(e){ console.error(e); } };
   const fetchMenu      = async () => { try { const { data, error } = await supabase.from('menu_items').select('*').eq('branch_id', branchId); if (error) throw error; setMenuItems(data); } catch(e){ console.error(e); } };
-  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*').eq('branch_id', branchId).neq('role', 'customer').order('username'); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
+  const fetchEmployees = async () => { try { const { data, error } = await supabase.from('users').select('*').eq('branch_id', branchId); if (error) throw error; setEmployees(data); } catch(e){ console.error(e); } };
   const fetchOrders    = async () => { try { const { data, error } = await supabase.from('orders').select('*, tables(*)').eq('branch_id', branchId).order('created_at', { ascending: false }); if (error) throw error; setOrders(data);    } catch(e){ console.error(e); } };
+  const fetchRoles     = async () => { setRoles(['admin', 'manager', 'supervisor', 'waiter', 'kitchen', 'staff', 'customer']); };
   const fetchCustomers = async () => { try { const { data, error } = await supabase.from('users').select('*').eq('role', 'customer'); if (error) throw error; setCustomers(data); } catch(e){ console.error(e); } };
 
   const handleSendPromo = async (e) => {
@@ -295,36 +294,43 @@ export default function BranchDashboard() {
     } catch(e){ console.error(e); }
   };
 
-  const handleAssignEmployeeRole = async (e) => {
+  const handleAddEmployee = async (e) => {
     e.preventDefault();
-    if (!selectedEmployee) return;
-
     try {
+      // 1. Find the user by email in the public.users table (populated via signup)
+      const { data: userData, error: fetchError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', newEmployee.email.trim()) 
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      
+      let targetId = userData?.id;
+
+      if (!targetId) {
+        alert('User with this email/username not found. Please ensure they have signed up first.');
+        return;
+      }
+
       const { error } = await supabase
         .from('users')
         .update({
-          role: selectedRole,
+          role: newEmployee.role,
           branch_id: parseInt(branchId),
         })
-        .eq('id', selectedEmployee.id);
+        .eq('id', targetId);
 
       if (error) throw error;
 
-      setSelectedEmployee(null);
-      setSelectedRole('');
-      setShowRoleModal(false);
+      setNewEmployee({ email: '', role: '' });
+      setShowAddEmployee(false);
       fetchEmployees();
-      alert('Staff role updated successfully!');
+      alert('Staff member onboarded successfully!');
     } catch(err){ 
       console.error(err); 
-      alert('Failed to assign role: ' + err.message);
+      alert('Failed to onboard staff: ' + err.message);
     }
-  };
-
-  const openRoleModal = (employee) => {
-    setSelectedEmployee(employee);
-    setSelectedRole(employee.role || 'staff');
-    setShowRoleModal(true);
   };
 
   const updateOrderStatus = async (orderId, status) => {
@@ -343,11 +349,6 @@ export default function BranchDashboard() {
     { key: 'customers', label: 'Customers'   },
     ...(isMgmt ? [{ key: 'employees', label: 'Staff' }] : []),
   ];
-
-  const staffAwaitingRole = useMemo(
-    () => employees.filter((employee) => ['staff', null, undefined, ''].includes(employee.role)),
-    [employees]
-  );
 
   /* ── Main ─────────────────────────────────────────────────────── */
   return (
@@ -577,64 +578,31 @@ export default function BranchDashboard() {
         {/* ══ EMPLOYEES ═══════════════════════════════════════════ */}
         {activeTab === 'employees' && (
           <div className="anim-2 space-y-5">
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-3xl border border-black/[0.06] shadow-sm px-6 py-5">
-                <p className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">Assigned staff</p>
-                <p className="font-syne text-3xl font-black text-[#0a0a0a] mt-3">{employees.length}</p>
-              </div>
-              <div className="bg-white rounded-3xl border border-black/[0.06] shadow-sm px-6 py-5">
-                <p className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">Waiting for role</p>
-                <p className="font-syne text-3xl font-black text-[#0a0a0a] mt-3">{staffAwaitingRole.length}</p>
-              </div>
-              <div className="bg-white rounded-3xl border border-black/[0.06] shadow-sm px-6 py-5">
-                <p className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">Manager action</p>
-                <p className="font-dm text-sm text-gray-500 mt-3">Assign each team member to the right branch role here.</p>
-              </div>
+            <div className="flex items-center justify-between px-1 pt-2">
+              <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">Branch Staff</h2>
+              {isMgmt && (
+                <button onClick={() => setShowAddEmployee(true)}
+                  className="flex items-center gap-2 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-sm uppercase tracking-wide px-6 py-3.5 rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 active:scale-95 transition-all">
+                  <Plus size={18} strokeWidth={2.5} /> Add Staff
+                </button>
+              )}
             </div>
-            <div className="bg-white rounded-3xl border border-black/[0.06] shadow-sm p-6">
-              <div className="flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">Branch Staff</h2>
-                  <p className="font-dm text-sm text-gray-400 mt-1">
-                    Staff already belong to this branch. Managers and supervisors assign their working role here.
-                  </p>
-                </div>
-                <div className="font-syne text-xs font-bold uppercase tracking-wider bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full shrink-0">
-                  Role assignment
-                </div>
-              </div>
-              <div className="space-y-3">
-                {employees.map((emp, idx) => (
-                  <div key={emp.id} className="hover-lift bg-[#fafaf8] rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6" style={{ animationDelay: `${idx * 0.04}s` }}>
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
-                    <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
-                      <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">{emp.username || emp.email}</p>
-                      <p className="font-dm text-sm text-gray-400 mt-0.5">{emp.email || `Branch #${branchId}`}</p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`font-syne text-xs font-bold uppercase tracking-wide px-4 py-2 rounded-full shrink-0 ${emp.role && emp.role !== 'staff' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                        {emp.role || 'staff'}
-                      </span>
-                      {isMgmt && (
-                        <button
-                          onClick={() => openRoleModal(emp)}
-                          className="flex items-center gap-2 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-xs uppercase tracking-wide px-5 py-3 rounded-2xl hover:-translate-y-0.5 active:scale-95 transition-all"
-                        >
-                          <ShieldCheck size={15} strokeWidth={2.2} /> Assign Role
-                        </button>
-                      )}
-                    </div>
+            <div className="space-y-3">
+              {employees.map((emp, idx) => (
+                <div key={emp.id} className="hover-lift bg-white rounded-3xl border border-black/[0.06] shadow-sm overflow-hidden relative flex items-center gap-5 pl-6 pr-6 py-6" style={{ animationDelay: `${idx * 0.04}s` }}>
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD600] rounded-l-3xl" />
+                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
+                    <Users size={26} className="text-[#0a0a0a]" strokeWidth={1.5} />
                   </div>
-                ))}
-                {employees.length === 0 && (
-                  <div className="text-center py-20 bg-[#fafaf8] rounded-3xl border border-dashed border-gray-200">
-                    <p className="font-syne text-gray-400 font-bold uppercase tracking-widest">No branch staff assigned yet</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">{emp.username}</p>
+                    <p className="font-dm text-sm text-gray-400 mt-0.5">Branch #{branchId}</p>
                   </div>
-                )}
-              </div>
+                  <span className="font-syne text-xs font-bold uppercase tracking-wide bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full shrink-0">
+                    {emp.role}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -722,37 +690,31 @@ export default function BranchDashboard() {
       )}
 
       {/* ── ADD EMPLOYEE MODAL ──────────────────────────────────── */}
-      {showRoleModal && (
-        <Modal onClose={() => setShowRoleModal(false)} title="Assign Branch Role" icon={<ShieldCheck size={18} color="#0a0a0a" />}>
-          <form onSubmit={handleAssignEmployeeRole} className="space-y-5">
+      {showAddEmployee && (
+        <Modal onClose={() => setShowAddEmployee(false)} title="Hire Staff" icon={<Users size={18} color="#0a0a0a" />}>
+          <form onSubmit={handleAddEmployee} className="space-y-5">
             <div className="space-y-2">
-              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Team member</label>
-              <div className="rounded-2xl bg-gray-100 px-5 py-4">
-                <p className="font-syne text-base font-extrabold text-[#0a0a0a]">
-                  {selectedEmployee?.username || selectedEmployee?.email}
-                </p>
-                <p className="font-dm text-sm text-gray-400 mt-1">{selectedEmployee?.email}</p>
-              </div>
+              <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">User Email / Username</label>
+              <input className={inputCls} placeholder="e.g. jane@example.com"
+                value={newEmployee.email} onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })} required />
+              <p className="text-[10px] text-gray-400 italic">User must have signed up for an account first.</p>
             </div>
             <div className="space-y-2">
               <label className="font-syne text-xs font-bold uppercase tracking-wider text-gray-400">Role</label>
-              <select className={selectCls} value={selectedRole}
-                onChange={e => setSelectedRole(e.target.value)} required>
+              <select className={selectCls} value={newEmployee.role}
+                onChange={e => setNewEmployee({ ...newEmployee, role: e.target.value })} required>
                 <option value="">Select role…</option>
-                {MANAGER_ASSIGNABLE_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                {roles.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
-              <p className="text-[11px] text-gray-400">
-                Use <span className="font-syne font-bold text-[#0a0a0a]">staff</span> if they should keep basic branch access while setup continues.
-              </p>
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setShowRoleModal(false)}
+              <button type="button" onClick={() => setShowAddEmployee(false)}
                 className="flex-1 py-4 bg-gray-100 text-[#0a0a0a] font-syne font-bold uppercase text-sm rounded-2xl hover:bg-gray-200 active:scale-95 transition-all">
                 Cancel
               </button>
               <button type="submit"
                 className="flex-1 py-4 bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold uppercase text-sm rounded-2xl shadow-[0_4px_16px_rgba(255,214,0,.3)] hover:-translate-y-0.5 active:scale-95 transition-all">
-                Save Role
+                Promote to Staff
               </button>
             </div>
           </form>

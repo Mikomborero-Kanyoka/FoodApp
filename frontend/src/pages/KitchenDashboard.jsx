@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { getCurrentUserContext, subscribeToUserContext } from '../authProfile';
 import { Utensils, Check, ChefHat, ArrowLeft, Zap, Clock } from 'lucide-react';
 
 /* ── Fonts + keyframes (injected once) ─────────────────────────── */
@@ -69,26 +68,26 @@ export default function KitchenDashboard() {
   const { branchId } = useParams();
   const navigate     = useNavigate();
   const [orders, setOrders] = useState([]);
+
+  const [user, setUser] = useState(null);
   const [isMgmt, setIsMgmt] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    getCurrentUserContext()
-      .then((context) => {
-        if (!mounted) return;
-        setIsMgmt(['admin', 'manager', 'supervisor'].includes(context?.role));
-      })
-      .catch((error) => console.error('Failed to load kitchen context', error));
-
-    const { data: { subscription } } = subscribeToUserContext((context) => {
-      setIsMgmt(['admin', 'manager', 'supervisor'].includes(context?.role));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        const role = session.user.user_metadata?.role || session.user.app_metadata?.role;
+        setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+      }
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      const role = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+      setIsMgmt(['admin', 'manager', 'supervisor'].includes(role));
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {

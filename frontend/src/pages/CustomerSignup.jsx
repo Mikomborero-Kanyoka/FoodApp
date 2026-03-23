@@ -1,9 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { STAFF_SIGNUP_ROLE } from '../authProfile';
-import { UserPlus, ArrowRight, Zap, ArrowLeft, ShieldCheck, Chrome, BriefcaseBusiness } from 'lucide-react';
+import { UserPlus, ArrowRight, Zap, ArrowLeft, ShieldCheck, Chrome } from 'lucide-react';
 
 /* ── Fonts (injected once) ─────────────────────────────────────── */
 if (!document.querySelector('[data-cs-fonts]')) {
@@ -51,59 +50,32 @@ const inputCls =
   'w-full px-5 py-4 bg-gray-100 rounded-2xl border-2 border-transparent focus:border-[#FFD600] outline-none font-dm text-base text-[#0a0a0a] transition-all placeholder:text-gray-400';
 
 export default function CustomerSignup() {
-  const queryParams = new URLSearchParams(window.location.search);
-  const mode = queryParams.get('mode') === 'staff' ? 'staff' : 'customer';
-  const isStaffMode = mode === 'staff';
   const [username, setUsername] = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState(false);
   const navigate = useNavigate();
-  const copy = useMemo(() => ({
-    title: isStaffMode ? 'Join the\nCrew' : 'Join the\nClub',
-    subtitle: isStaffMode ? 'Create your staff account to join a branch' : 'Store receipts & get exclusive deals',
-    icon: isStaffMode ? <BriefcaseBusiness size={28} color="#0a0a0a" strokeWidth={2.5} /> : <UserPlus size={28} color="#0a0a0a" strokeWidth={2.5} />,
-    usernameLabel: isStaffMode ? 'Full Name' : 'Username (3-15 chars)',
-    usernamePlaceholder: isStaffMode ? 'Jamie Staff Member' : 'CoolCustomer123',
-    emailPlaceholder: isStaffMode ? 'staff@example.com' : 'customer@example.com',
-    submitLabel: isStaffMode ? 'Create Staff Account' : 'Create Account',
-    successMessage: isStaffMode
-      ? 'Staff account created. Check your email, then sign in and wait for admin branch assignment.'
-      : 'Account created! Please check your email for a confirmation link.',
-    postSuccess: isStaffMode
-      ? 'After confirming, sign in from the staff portal. Admin will assign your branch and your manager will assign your role.'
-      : 'Once confirmed, you can sign in and start ordering!',
-    backLabel: isStaffMode ? 'Back to Staff Sign In' : 'Back to Sign In',
-  }), [isStaffMode]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess(false);
 
-    if (!isStaffMode && (username.length < 3 || username.length > 15)) {
+    if (username.length < 3 || username.length > 15) {
       setError('Username must be between 3 and 15 characters.');
       return;
     }
 
-    if (isStaffMode && username.trim().length < 3) {
-      setError('Full name must be at least 3 characters.');
-      return;
-    }
-
     try {
-      const signupRole = isStaffMode ? STAFF_SIGNUP_ROLE : 'customer';
-      const normalizedName = username.trim();
-
       const { data, error: signupError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: window.location.origin + '/login',
           data: {
-            role: signupRole,
-            username: normalizedName
+            role: 'customer',
+            username: username
           }
         }
       });
@@ -116,8 +88,8 @@ export default function CustomerSignup() {
           .from('users')
           .insert([{ 
             id: data.user.id, 
-            role: signupRole,
-            username: normalizedName,
+            role: 'customer',
+            username: username,
             email: email
           }]);
         
@@ -154,23 +126,18 @@ export default function CustomerSignup() {
         </div>
 
         {/* Icon */}
-          <div className="anim-1 relative flex items-center justify-center mb-6">
+        <div className="anim-1 relative flex items-center justify-center mb-6">
           <div className="pulse-ring" style={{ width: 64, height: 64, inset: 'auto', borderRadius: '50%' }} />
           <div className="relative w-16 h-16 rounded-2xl bg-[#FFD600] flex items-center justify-center z-10">
-            {copy.icon}
+            <UserPlus size={28} color="#0a0a0a" strokeWidth={2.5} />
           </div>
         </div>
 
         <h1 className="font-syne anim-2 text-5xl font-black text-white leading-none tracking-tight mb-3">
-          {copy.title.split('\n').map((part, index) => (
-            <React.Fragment key={part}>
-              {index > 0 && <br />}
-              {part}
-            </React.Fragment>
-          ))}
+          Join the<br/>Club
         </h1>
         <p className="anim-3 font-syne text-xs font-semibold uppercase tracking-widest text-gray-500">
-          {copy.subtitle}
+          Store receipts &amp; get exclusive deals
         </p>
       </div>
 
@@ -188,7 +155,7 @@ export default function CustomerSignup() {
           {/* Success message */}
           {success && (
             <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 text-green-600 font-syne font-bold text-sm uppercase tracking-wide mb-6">
-              {copy.successMessage}
+              Account created! Please check your email for a confirmation link.
             </div>
           )}
 
@@ -196,12 +163,12 @@ export default function CustomerSignup() {
             <form onSubmit={handleSignup} className="space-y-5">
               <div className="space-y-2">
                 <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
-                  {copy.usernameLabel}
+                  Username (3-15 chars)
                 </label>
                 <input
                   type="text"
                   className={inputCls}
-                  placeholder={copy.usernamePlaceholder}
+                  placeholder="CoolCustomer123"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   required
@@ -215,7 +182,7 @@ export default function CustomerSignup() {
                 <input
                   type="email"
                   className={inputCls}
-                  placeholder={copy.emailPlaceholder}
+                  placeholder="customer@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -240,13 +207,13 @@ export default function CustomerSignup() {
                 type="submit"
                 className="signup-btn w-full bg-[#FFD600] text-[#0a0a0a] font-syne font-extrabold text-base uppercase tracking-wide py-5 rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(255,214,0,.3)] mt-2"
               >
-                {copy.submitLabel} <ArrowRight size={18} strokeWidth={2.5} />
+                Create Account <ArrowRight size={18} strokeWidth={2.5} />
               </button>
             </form>
           ) : (
             <div className="text-center py-6">
               <p className="font-dm text-gray-500 mb-8">
-                {copy.postSuccess}
+                Once confirmed, you can sign in and start ordering!
               </p>
               <Link
                 to="/login"
@@ -257,19 +224,15 @@ export default function CustomerSignup() {
             </div>
           )}
 
-          {!isStaffMode && (
-            <>
-              <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
-                <span style={{ fontSize: 12, color: '#999' }}>OR</span>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
-              </div>
+          <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
+            <span style={{ fontSize: 12, color: '#999' }}>OR</span>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(0,0,0,0.06)' }} />
+          </div>
 
-              <button onClick={handleGoogleSignup} className="signup-btn w-full bg-white text-[#0a0a0a] border border-gray-200 font-syne font-bold text-sm uppercase tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]">
-                <Chrome size={18} /> Sign up with Google
-              </button>
-            </>
-          )}
+          <button onClick={handleGoogleSignup} className="signup-btn w-full bg-white text-[#0a0a0a] border border-gray-200 font-syne font-bold text-sm uppercase tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]">
+            <Chrome size={18} /> Sign up with Google
+          </button>
 
           {/* Footer links */}
           <div className="mt-8 pt-7 border-t border-gray-100 flex flex-col items-center gap-4">
@@ -278,7 +241,7 @@ export default function CustomerSignup() {
               to="/login"
               className="inline-flex items-center gap-2 font-syne font-bold text-sm uppercase tracking-wide text-[#0a0a0a] hover:text-[#9a7e00] transition-colors"
             >
-              <ArrowLeft size={15} /> {copy.backLabel}
+              <ArrowLeft size={15} /> Back to Sign In
             </Link>
           </div>
 
