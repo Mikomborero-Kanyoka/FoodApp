@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { Plus, Users, Building, ChevronRight, Store, X, Zap } from 'lucide-react';
+import { Plus, Users, Building, ChevronRight, Store, X, Zap, LogOut, RefreshCw } from 'lucide-react';
 import {
   ADMIN_ASSIGNABLE_ROLES,
   fetchUserProfile,
@@ -102,6 +102,7 @@ export default function AdminDashboard() {
 
   const [user, setUser] = useState(null);
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+  const [isRefreshingEmployees, setIsRefreshingEmployees] = useState(false);
 
   useEffect(() => {
     const loadAdmin = async () => {
@@ -138,13 +139,43 @@ export default function AdminDashboard() {
   }, [navigate]);
 
   const fetchBranches  = async () => { try { const { data, error } = await supabase.from('branches').select('*'); if (error) throw error; setBranches(data);  } catch(e){ console.error(e); } };
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (withIndicator = false) => {
+    if (withIndicator) setIsRefreshingEmployees(true);
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (error) throw error;
-      setEmployees((data || []).filter(emp => !['customer', 'admin'].includes(emp.role)));
+      setEmployees((data || []).filter(emp => emp.role !== 'customer'));
     } catch(e){ console.error(e); }
+    finally {
+      if (withIndicator) setIsRefreshingEmployees(false);
+    }
   };
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const usersSubscription = supabase
+      .channel('admin_users')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchEmployees())
+      .subscribe();
+
+    const branchesSubscription = supabase
+      .channel('admin_branches')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'branches' }, () => fetchBranches())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(usersSubscription);
+      supabase.removeChannel(branchesSubscription);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (activeTab === 'employees') fetchEmployees();
+    if (activeTab === 'branches') fetchBranches();
+  }, [activeTab, user?.id]);
 
   const handleAddBranch = async (e) => {
     e.preventDefault();
@@ -184,6 +215,11 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login', { replace: true });
+  };
+
   if (isCheckingAccess) {
     return (
       <div className="font-dm min-h-svh bg-[#f2f2f0] flex items-center justify-center">
@@ -220,22 +256,32 @@ export default function AdminDashboard() {
           </div>
 
           {/* Tab nav */}
-          <div className="anim-1 flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl self-start sm:self-auto">
-            {[
-              { key: 'branches',  label: 'Branches',  icon: <Building size={16} /> },
-              { key: 'employees', label: 'Employees', icon: <Users size={16} /> },
-            ].map(t => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl font-syne font-bold text-sm uppercase tracking-wide transition-all active:scale-95
-                  ${activeTab === t.key
-                    ? 'bg-[#FFD600] text-[#0a0a0a]'
-                    : 'text-gray-400 hover:text-white'}`}
-              >
-                {t.icon} {t.label}
-              </button>
-            ))}
+          <div className="anim-1 flex flex-col sm:flex-row sm:items-center gap-3 self-start sm:self-auto">
+            <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl">
+              {[
+                { key: 'branches',  label: 'Branches',  icon: <Building size={16} /> },
+                { key: 'employees', label: 'Employees', icon: <Users size={16} /> },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl font-syne font-bold text-sm uppercase tracking-wide transition-all active:scale-95
+                    ${activeTab === t.key
+                      ? 'bg-[#FFD600] text-[#0a0a0a]'
+                      : 'text-gray-400 hover:text-white'}`}
+                >
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white/10 text-gray-300 hover:text-white hover:bg-white/15 font-syne font-bold text-sm uppercase tracking-wide transition-all active:scale-95"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
           </div>
         </div>
       </div>
@@ -303,6 +349,13 @@ export default function AdminDashboard() {
                   <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">
                     Staff Applications
                   </h2>
+                  <button
+                    onClick={() => fetchEmployees(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-black/[0.06] text-[#0a0a0a] hover:bg-gray-50 font-syne font-bold text-xs uppercase tracking-wide transition-all active:scale-95"
+                  >
+                    <RefreshCw size={14} className={isRefreshingEmployees ? 'animate-spin' : ''} />
+                    Refresh
+                  </button>
                 </div>
                 <div className="space-y-3">
                   {employees.filter(e => e.role === 'pending_staff').map((emp, idx) => (
@@ -342,6 +395,15 @@ export default function AdminDashboard() {
                 <h2 className="font-syne text-2xl font-black text-[#0a0a0a] tracking-tight">
                   Active Personnel
                 </h2>
+                {employees.filter(e => e.role === 'pending_staff').length === 0 && (
+                  <button
+                    onClick={() => fetchEmployees(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-black/[0.06] text-[#0a0a0a] hover:bg-gray-50 font-syne font-bold text-xs uppercase tracking-wide transition-all active:scale-95"
+                  >
+                    <RefreshCw size={14} className={isRefreshingEmployees ? 'animate-spin' : ''} />
+                    Refresh
+                  </button>
+                )}
               </div>
 
               {/* Employee cards */}
@@ -386,6 +448,16 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+                {employees.length === 0 && (
+                  <div className="bg-white rounded-3xl border border-dashed border-gray-200 px-8 py-16 text-center">
+                    <p className="font-syne text-sm font-bold uppercase tracking-widest text-gray-400">
+                      No employees visible yet
+                    </p>
+                    <p className="font-dm text-sm text-gray-500 mt-3">
+                      Try refreshing this list. If new staff still do not appear, apply the latest Supabase `users` policies so admins can read employee records.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
