@@ -91,8 +91,7 @@ export default function StaffSignup() {
             id: data.user.id, 
             role: 'pending_staff',
             username: username,
-            full_name: fullName,
-            email: email
+            full_name: fullName
           }]);
         
         if (profileError) console.error('Profile creation error:', profileError);

@@ -276,9 +276,6 @@ export default function AdminDashboard() {
                         <p className="font-syne text-lg font-extrabold text-[#0a0a0a] leading-snug">
                           {emp.full_name || emp.username}
                         </p>
-                        <p className="font-dm text-sm text-gray-400 mt-0.5">
-                          {emp.email}
-                        </p>
                       </div>
                       <button
                         onClick={() => { setSelectedStaff(emp); setShowAssignBranch(true); }}
