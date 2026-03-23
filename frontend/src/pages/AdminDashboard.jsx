@@ -341,6 +341,16 @@ export default function AdminDashboard() {
         {/* ── EMPLOYEES TAB ───────────────────────────────────── */}
         {activeTab === 'employees' && (
           <div className="anim-2 space-y-10">
+            {employees.length === 1 && employees[0]?.id === user?.id && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-3xl px-6 py-5">
+                <p className="font-syne text-sm font-bold uppercase tracking-wide text-yellow-700">
+                  Only Your Admin Profile Is Visible
+                </p>
+                <p className="font-dm text-sm text-yellow-800 mt-2 leading-relaxed">
+                  Have pending staff sign in once or refresh their pending page so the app can backfill their profile row. If they still do not appear, apply the latest Supabase migration for the `users` trigger and policies.
+                </p>
+              </div>
+            )}
 
             {/* Applications Section */}
             {employees.filter(e => e.role === 'pending_staff').length > 0 && (

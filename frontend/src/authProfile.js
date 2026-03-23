@@ -15,6 +15,46 @@ export async function fetchUserProfile(userId) {
   return data;
 }
 
+export function buildProfileFromAuthUser(user) {
+  if (!user?.id) return null;
+
+  const metadata = user.user_metadata || user.app_metadata || {};
+  const usernameFromEmail = user.email ? user.email.split('@')[0] : `user_${String(user.id).slice(0, 8)}`;
+  const rawBranchId = metadata.branch_id;
+  const parsedBranchId = rawBranchId === undefined || rawBranchId === null || rawBranchId === ''
+    ? null
+    : Number(rawBranchId);
+
+  return {
+    id: user.id,
+    username: metadata.username || usernameFromEmail,
+    role: metadata.role || 'customer',
+    branch_id: Number.isInteger(parsedBranchId) ? parsedBranchId : null,
+  };
+}
+
+export async function ensureUserProfile(user) {
+  const profilePayload = buildProfileFromAuthUser(user);
+  if (!profilePayload) return null;
+
+  const { error } = await supabase
+    .from('users')
+    .insert([profilePayload]);
+
+  if (error && error.code !== '23505') throw error;
+
+  return fetchUserProfile(user.id);
+}
+
+export async function loadUserProfile(user) {
+  if (!user?.id) return null;
+
+  const existingProfile = await fetchUserProfile(user.id);
+  if (existingProfile) return existingProfile;
+
+  return ensureUserProfile(user);
+}
+
 export function getEffectiveRole(user, profile) {
   return profile?.role || user?.user_metadata?.role || user?.app_metadata?.role || null;
 }

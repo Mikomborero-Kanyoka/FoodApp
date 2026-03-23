@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { LogIn, QrCode, Utensils, Zap, ChefHat, UserCircle, X, Camera, ArrowRight, Chrome, RefreshCw } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
-  fetchUserProfile,
+  loadUserProfile,
   getDashboardPath,
   getEffectiveBranchId,
   getEffectiveRole,
@@ -162,7 +162,7 @@ function Login() {
         return;
       }
 
-      const profile = await fetchUserProfile(sessionUser.id).catch((profileError) => {
+      const profile = await loadUserProfile(sessionUser).catch((profileError) => {
         console.error('Failed to load profile:', profileError);
         return null;
       });
@@ -242,7 +242,7 @@ function Login() {
 
       if (error) throw error;
 
-      const profile = await fetchUserProfile(data.user.id).catch((profileError) => {
+      const profile = await loadUserProfile(data.user).catch((profileError) => {
         console.error('Failed to load profile:', profileError);
         return null;
       });

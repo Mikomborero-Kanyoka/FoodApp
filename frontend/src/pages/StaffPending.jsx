@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { RefreshCw, LogOut, Clock3, Zap, ShieldCheck } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import {
-  fetchUserProfile,
+  loadUserProfile,
   getDashboardPath,
   getEffectiveBranchId,
   getEffectiveRole,
@@ -67,7 +67,7 @@ export default function StaffPending() {
 
       setUser(session.user);
 
-      const profile = await fetchUserProfile(session.user.id).catch((profileError) => {
+      const profile = await loadUserProfile(session.user).catch((profileError) => {
         console.error('Failed to load profile:', profileError);
         return null;
       });
