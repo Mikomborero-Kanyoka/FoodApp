@@ -465,24 +465,6 @@ function Login() {
               </h3>
               <p style={{ color: '#999', fontSize: 13, marginBottom: 24 }}>Personnel access only</p>
 
-              <div style={{
-                marginBottom: 20,
-                padding: '16px',
-                borderRadius: '18px',
-                background: 'linear-gradient(135deg, rgba(10,10,10,1) 0%, rgba(55,48,163,0.96) 100%)',
-                color: '#fff',
-              }}>
-                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c7d2fe', marginBottom: 8 }}>
-                  Staff Onboarding
-                </p>
-                <p className="syne" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-                  Team accounts follow a different setup flow
-                </p>
-                <p style={{ fontSize: 13, lineHeight: 1.6, color: '#dbe4ff' }}>
-                  Staff sign up here first, admin assigns a branch, then the branch manager assigns the working role.
-                </p>
-              </div>
-
               {error && (
                 <div style={{
                   background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
@@ -528,7 +510,7 @@ function Login() {
                   New team member?
                   <button
                     onClick={() => navigate('/signup?mode=staff')}
-                    style={{ background: 'none', border: 'none', color: '#312e81', fontWeight: 800, cursor: 'pointer', marginLeft: 4 }}
+                    style={{ background: 'none', border: 'none', color: '#0a0a0a', fontWeight: 800, cursor: 'pointer', marginLeft: 4 }}
                   >
                     Create staff account
                   </button>
