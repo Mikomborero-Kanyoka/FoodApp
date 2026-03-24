@@ -2,12 +2,20 @@ import { supabase } from './supabaseClient';
 
 export const ADMIN_ASSIGNABLE_ROLES = ['manager', 'supervisor', 'waiter', 'kitchen'];
 
+function getUsernameFromEmail(email, userId) {
+  if (typeof email === 'string' && email.includes('@')) {
+    return email.split('@')[0];
+  }
+
+  return `user_${String(userId).slice(0, 8)}`;
+}
+
 export async function fetchUserProfile(userId) {
   if (!userId) return null;
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, role, branch_id')
+    .select('*')
     .eq('id', userId)
     .maybeSingle();
 
@@ -19,7 +27,8 @@ export function buildProfileFromAuthUser(user) {
   if (!user?.id) return null;
 
   const metadata = user.user_metadata || user.app_metadata || {};
-  const usernameFromEmail = user.email ? user.email.split('@')[0] : `user_${String(user.id).slice(0, 8)}`;
+  const normalizedUsername = typeof metadata.username === 'string' ? metadata.username.trim() : '';
+  const usernameFromEmail = getUsernameFromEmail(user.email, user.id);
   const rawBranchId = metadata.branch_id;
   const parsedBranchId = rawBranchId === undefined || rawBranchId === null || rawBranchId === ''
     ? null
@@ -27,7 +36,7 @@ export function buildProfileFromAuthUser(user) {
 
   return {
     id: user.id,
-    username: metadata.username || usernameFromEmail,
+    username: normalizedUsername || usernameFromEmail,
     role: metadata.role || 'customer',
     branch_id: Number.isInteger(parsedBranchId) ? parsedBranchId : null,
   };
@@ -56,7 +65,13 @@ export async function loadUserProfile(user) {
 }
 
 export function getEffectiveRole(user, profile) {
-  return profile?.role || user?.user_metadata?.role || user?.app_metadata?.role || null;
+  const resolvedRole = profile?.role || user?.user_metadata?.role || user?.app_metadata?.role || null;
+
+  if (profile?.is_active === false && resolvedRole && !['admin', 'customer'].includes(resolvedRole)) {
+    return 'pending_staff';
+  }
+
+  return resolvedRole;
 }
 
 export function getEffectiveBranchId(user, profile) {

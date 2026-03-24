@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { UserPlus, ArrowRight, Zap, ArrowLeft, ShieldCheck, Chrome } from 'lucide-react';
+import PasswordField from '../components/PasswordField';
 
 /* ── Fonts (injected once) ─────────────────────────────────────── */
 if (!document.querySelector('[data-ss-fonts]')) {
@@ -165,13 +166,13 @@ export default function StaffSignup() {
                 <label className="font-syne text-xs font-bold uppercase tracking-widest text-gray-400">
                   Password
                 </label>
-                <input
-                  type="password"
+                <PasswordField
                   className={inputCls}
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
+                  autoComplete="new-password"
                 />
               </div>
 
