@@ -256,7 +256,7 @@ export default function CustomerHistory() {
       </div>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="max-w-xl mx-auto px-[16px] sm:px-4 space-y-4 sm:space-y-6">
+      <div className="relative z-10 max-w-xl mx-auto px-[16px] sm:px-4 space-y-4 sm:space-y-6">
 
         {/* Profile card — floats over dark bar */}
         <div className="anim-2 -mt-[48px] sm:-mt-14 bg-white rounded-3xl shadow-lg border border-black/[0.05] p-5 sm:p-7 flex items-center gap-4 sm:gap-5">

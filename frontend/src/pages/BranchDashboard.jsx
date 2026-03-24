@@ -421,7 +421,7 @@ export default function BranchDashboard() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 -mt-12 space-y-6">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 -mt-12 space-y-6">
 
         {/* ══ TABLES ══════════════════════════════════════════════ */}
         {activeTab === 'tables' && (

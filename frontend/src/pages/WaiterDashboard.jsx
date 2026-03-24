@@ -308,7 +308,7 @@ export default function WaiterDashboard() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-4 -mt-12 space-y-5">
+      <div className="relative z-10 max-w-2xl mx-auto px-4 -mt-12 space-y-5">
 
         {/* Scan result toast */}
         {scanResult && (

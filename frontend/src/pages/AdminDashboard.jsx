@@ -108,6 +108,63 @@ function buildBranchesById(branches) {
   }, {});
 }
 
+function sortBranches(records = []) {
+  return [...records].sort((left, right) =>
+    String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }),
+  );
+}
+
+function sortUsers(records = []) {
+  return [...records].sort((left, right) => {
+    if (left.role === 'admin' && right.role !== 'admin') return -1;
+    if (left.role !== 'admin' && right.role === 'admin') return 1;
+    return getRecordName(left).localeCompare(getRecordName(right), undefined, { sensitivity: 'base' });
+  });
+}
+
+function getAdminOrdersQuery(includeItems = true) {
+  const baseSelection = `
+    id,
+    user_id,
+    branch_id,
+    status,
+    total_amount,
+    created_at,
+    branches (
+      id,
+      name
+    )
+  `;
+
+  const selection = includeItems
+    ? `
+      ${baseSelection},
+      order_items (
+        quantity,
+        price_at_order,
+        menu_item_id,
+        menu_items (
+          name,
+          category
+        )
+      )
+    `
+    : baseSelection;
+
+  return supabase
+    .from('orders')
+    .select(selection)
+    .order('created_at', { ascending: false });
+}
+
+function getResultError(result) {
+  if (result?.status !== 'fulfilled') {
+    return result?.reason instanceof Error ? result.reason : new Error(result?.reason?.message || 'Request failed.');
+  }
+
+  return result.value?.error || null;
+}
+
 function DashboardPanel({ title, kicker, action, children, className = '' }) {
   return (
     <section className={`lift-card bg-white rounded-3xl border border-black/[0.06] shadow-sm p-5 sm:p-6 ${className}`}>
@@ -235,52 +292,47 @@ export default function AdminDashboard() {
     if (showIndicator) setIsRefreshing(true);
 
     try {
-      const [branchesResult, usersResult, ordersResult] = await Promise.all([
+      const [branchesResult, usersResult, ordersResult] = await Promise.allSettled([
         supabase.from('branches').select('*'),
         supabase.from('users').select('*'),
-        supabase
-          .from('orders')
-          .select(`
-            id,
-            user_id,
-            branch_id,
-            status,
-            total_amount,
-            created_at,
-            branches (
-              id,
-              name
-            ),
-            order_items (
-              quantity,
-              price_at_order,
-              menu_item_id,
-              menu_items (
-                name,
-                category
-              )
-            )
-          `)
-          .order('created_at', { ascending: false }),
+        getAdminOrdersQuery(true),
       ]);
 
-      if (branchesResult.error) throw branchesResult.error;
-      if (usersResult.error) throw usersResult.error;
-      if (ordersResult.error) throw ordersResult.error;
+      const partialFailures = [];
 
-      const nextBranches = [...(branchesResult.data || [])].sort((left, right) =>
-        String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }),
-      );
+      const branchesError = getResultError(branchesResult);
+      if (branchesError) {
+        partialFailures.push(`branches: ${branchesError.message || 'load failed'}`);
+      } else {
+        setBranches(sortBranches(branchesResult.value.data || []));
+      }
 
-      const nextUsers = [...(usersResult.data || [])].sort((left, right) => {
-        if (left.role === 'admin' && right.role !== 'admin') return -1;
-        if (left.role !== 'admin' && right.role === 'admin') return 1;
-        return getRecordName(left).localeCompare(getRecordName(right), undefined, { sensitivity: 'base' });
-      });
+      const usersError = getResultError(usersResult);
+      if (usersError) {
+        partialFailures.push(`people: ${usersError.message || 'load failed'}`);
+      } else {
+        setUserRecords(sortUsers(usersResult.value.data || []));
+      }
 
-      setBranches(nextBranches);
-      setUserRecords(nextUsers);
-      setOrders(ordersResult.data || []);
+      const ordersError = getResultError(ordersResult);
+      if (ordersError) {
+        const fallbackOrdersResult = await getAdminOrdersQuery(false);
+
+        if (fallbackOrdersResult.error) {
+          partialFailures.push(`orders: ${fallbackOrdersResult.error.message || ordersError.message || 'load failed'}`);
+        } else {
+          setOrders(fallbackOrdersResult.data || []);
+        }
+      } else {
+        setOrders(ordersResult.value.data || []);
+      }
+
+      if (partialFailures.length > 0) {
+        setNotice({
+          tone: 'error',
+          message: `Some admin data could not be loaded: ${partialFailures.join(' | ')}`,
+        });
+      }
     } catch (error) {
       console.error(error);
       setNotice({
@@ -614,7 +666,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-16 space-y-6">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 -mt-16 space-y-6">
         {notice ? (
           <div
             className={`anim-3 rounded-3xl border px-5 py-4 flex items-start justify-between gap-4 ${
