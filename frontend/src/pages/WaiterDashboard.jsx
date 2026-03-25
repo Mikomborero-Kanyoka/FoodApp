@@ -189,15 +189,6 @@ export default function WaiterDashboard() {
     return 'Could not start the camera. Try again or use image upload instead.';
   };
 
-  const pickPreferredCamera = (cameras) => {
-    if (!Array.isArray(cameras) || cameras.length === 0) return null;
-
-    return (
-      cameras.find((camera) => /(back|rear|environment)/i.test(camera.label || '')) ||
-      cameras[0]
-    );
-  };
-
   const stopScannerInstance = async (scanner) => {
     if (!scanner) return;
 
@@ -234,20 +225,7 @@ export default function WaiterDashboard() {
 
       try {
         const config = { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 };
-        let cameraTarget = { facingMode: 'environment' };
-
-        try {
-          const cameras = await Html5Qrcode.getCameras();
-          const preferredCamera = pickPreferredCamera(cameras);
-
-          if (preferredCamera?.id) {
-            cameraTarget = preferredCamera.id;
-          }
-        } catch (cameraListError) {
-          console.warn('Could not load camera list, using default facing mode:', cameraListError);
-        }
-
-        await scanner.start(cameraTarget, config, onScanSuccess, () => {});
+        await scanner.start({ facingMode: 'environment' }, config, onScanSuccess, () => {});
 
         if (disposed) {
           await stopScannerInstance(scanner);
@@ -372,7 +350,7 @@ export default function WaiterDashboard() {
         ...order,
         items: order.order_items.map(oi => ({
           quantity: oi.quantity,
-          menu_item: oi.menu_item
+          menu_item: oi.menu_items
         }))
       }));
 
