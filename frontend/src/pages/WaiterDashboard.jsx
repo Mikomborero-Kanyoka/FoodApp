@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { Bell, Check, Utensils, ArrowLeft, QrCode, X, Zap, Upload, LogOut } from 'lucide-react';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { Bell, Check, Utensils, ArrowLeft, QrCode, X, Zap, Upload, LogOut, RefreshCw } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import {
   fetchUserProfile,
   getDashboardPath,
@@ -63,8 +63,8 @@ if (!document.querySelector('[data-wd-fonts]')) {
     .serve-btn:hover  { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(255,214,0,.45); }
     .serve-btn:active { transform: scale(.97); }
 
-    .scanner-wrapper #reader        { border: none !important; }
-    .scanner-wrapper #reader video  { border-radius: 16px; }
+    .scanner-wrapper #wd-reader        { border: none !important; }
+    .scanner-wrapper #wd-reader video  { border-radius: 16px; }
   `;
   document.head.appendChild(style);
 }
@@ -75,10 +75,15 @@ if (!document.querySelector('[data-wd-fonts]')) {
 export default function WaiterDashboard() {
   const { branchId } = useParams();
   const navigate     = useNavigate();
+  const scannerRef   = useRef(null);
+  const scanLockRef  = useRef(false);
 
   const [orders,           setOrders]           = useState([]);
   const [showScanner,      setShowScanner]      = useState(false);
   const [scanResult,       setScanResult]       = useState(null);
+  const [scannerError,     setScannerError]     = useState('');
+  const [scannerRetryKey,  setScannerRetryKey]  = useState(0);
+  const [isStartingScan,   setIsStartingScan]   = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isLoggingOut,     setIsLoggingOut]     = useState(false);
 
@@ -153,19 +158,133 @@ export default function WaiterDashboard() {
     };
   }, [branchId]);
 
+  const getScannerErrorMessage = (err) => {
+    const message = String(err?.message || err || '').toLowerCase();
+
+    const isSecureContextMissing =
+      window.location.protocol !== 'https:' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return 'Camera access is not supported in this browser.';
+    }
+
+    if (isSecureContextMissing) {
+      return 'Camera access requires HTTPS or localhost.';
+    }
+
+    if (message.includes('permission') || message.includes('notallowed')) {
+      return 'Camera permission was blocked. Allow camera access and try again.';
+    }
+
+    if (message.includes('notfound') || message.includes('device not found') || message.includes('no camera')) {
+      return 'No camera was found on this device.';
+    }
+
+    if (message.includes('notreadable') || message.includes('trackstart')) {
+      return 'The camera is busy in another app. Close it there and retry.';
+    }
+
+    return 'Could not start the camera. Try again or use image upload instead.';
+  };
+
+  const pickPreferredCamera = (cameras) => {
+    if (!Array.isArray(cameras) || cameras.length === 0) return null;
+
+    return (
+      cameras.find((camera) => /(back|rear|environment)/i.test(camera.label || '')) ||
+      cameras[0]
+    );
+  };
+
+  const stopScannerInstance = async (scanner) => {
+    if (!scanner) return;
+
+    try {
+      await scanner.stop();
+    } catch (stopError) {
+      const message = String(stopError?.message || stopError || '').toLowerCase();
+
+      if (!message.includes('not started') && !message.includes('scanner is not running')) {
+        console.error('Failed to stop waiter scanner:', stopError);
+      }
+    }
+
+    try {
+      scanner.clear();
+    } catch (clearError) {
+      console.error('Failed to clear waiter scanner:', clearError);
+    }
+  };
+
   /* ── QR Scanner ─────────────────────────────────────────────── */
   useEffect(() => {
     if (!showScanner) return;
-    const scanner = new Html5QrcodeScanner(
-      'wd-reader',
-      { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
-      false
-    );
-    scanner.render(onScanSuccess, () => {});
-    return () => { scanner.clear().catch(console.error); };
-  }, [showScanner]);
+    let disposed = false;
+    let scanner = null;
+
+    scanLockRef.current = false;
+    setScannerError('');
+    setIsStartingScan(true);
+
+    const startScanner = async () => {
+      scanner = new Html5Qrcode('wd-reader');
+      scannerRef.current = scanner;
+
+      try {
+        const config = { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 };
+        let cameraTarget = { facingMode: 'environment' };
+
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          const preferredCamera = pickPreferredCamera(cameras);
+
+          if (preferredCamera?.id) {
+            cameraTarget = preferredCamera.id;
+          }
+        } catch (cameraListError) {
+          console.warn('Could not load camera list, using default facing mode:', cameraListError);
+        }
+
+        await scanner.start(cameraTarget, config, onScanSuccess, () => {});
+
+        if (disposed) {
+          await stopScannerInstance(scanner);
+        }
+      } catch (err) {
+        console.error('Failed to start waiter scanner:', err);
+
+        if (!disposed) {
+          setScannerError(getScannerErrorMessage(err));
+        }
+
+        await stopScannerInstance(scanner);
+      } finally {
+        if (!disposed) {
+          setIsStartingScan(false);
+        }
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      disposed = true;
+
+      if (scannerRef.current === scanner) {
+        scannerRef.current = null;
+      }
+
+      void stopScannerInstance(scanner);
+    };
+  }, [showScanner, scannerRetryKey]);
 
   const onScanSuccess = async (decodedText) => {
+    if (scanLockRef.current) return;
+
+    scanLockRef.current = true;
+
     try {
       // Logic for scan completion:
       // If code starts with "RECEIPT-", it's an order completion
@@ -190,6 +309,24 @@ export default function WaiterDashboard() {
     }
   };
 
+  const handleOpenScanner = () => {
+    setScanResult(null);
+    setScannerError('');
+    setScannerRetryKey((current) => current + 1);
+    setShowScanner(true);
+  };
+
+  const handleCloseScanner = () => {
+    setShowScanner(false);
+    setIsStartingScan(false);
+  };
+
+  const handleRetryScanner = () => {
+    scanLockRef.current = false;
+    setScannerError('');
+    setScannerRetryKey((current) => current + 1);
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -202,7 +339,11 @@ export default function WaiterDashboard() {
       setScanResult({ success: false, message: 'Could not find QR code in image' });
     } finally {
       setIsProcessingFile(false);
-      qr.clear();
+      try {
+        qr.clear();
+      } catch (clearError) {
+        console.error('Failed to clear uploaded QR scanner:', clearError);
+      }
     }
   };
 
@@ -317,7 +458,7 @@ export default function WaiterDashboard() {
               </div>
             )}
             <button
-              onClick={() => setShowScanner(true)}
+              onClick={handleOpenScanner}
               className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-syne font-bold text-sm uppercase tracking-wide px-5 py-3 rounded-2xl transition-all active:scale-95"
             >
               <QrCode size={16} /> Scan Receipt
@@ -468,7 +609,7 @@ export default function WaiterDashboard() {
                 <h2 className="font-syne text-xl font-extrabold text-white">Scan Receipt</h2>
               </div>
               <button
-                onClick={() => setShowScanner(false)}
+                onClick={handleCloseScanner}
                 className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all active:scale-95"
               >
                 <X size={18} />
@@ -477,9 +618,34 @@ export default function WaiterDashboard() {
 
             {/* Scanner area */}
             <div className="px-7 py-6 space-y-5">
-              <div className="scanner-wrapper rounded-2xl overflow-hidden border border-gray-100">
-                <div id="wd-reader" />
+              <div className="scanner-wrapper rounded-2xl overflow-hidden border border-gray-100 bg-[#0a0a0a] relative min-h-[280px]">
+                <div id="wd-reader" className="min-h-[280px]" />
+
+                {isStartingScan && (
+                  <div className="absolute inset-0 bg-[#0a0a0a]/90 flex flex-col items-center justify-center gap-3 text-white">
+                    <RefreshCw size={22} className="animate-spin" />
+                    <p className="font-syne text-xs font-bold uppercase tracking-widest text-white/70">
+                      Opening Camera
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {scannerError && (
+                <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-4 space-y-3">
+                  <p className="font-syne text-xs font-bold uppercase tracking-wide text-red-600">
+                    {scannerError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryScanner}
+                    className="w-full flex items-center justify-center gap-2 bg-[#0a0a0a] text-white font-syne font-bold text-sm uppercase tracking-wide py-3 rounded-2xl transition-all active:scale-95"
+                  >
+                    <RefreshCw size={16} />
+                    Retry Camera
+                  </button>
+                </div>
+              )}
 
               {/* Hidden element for file scanning */}
               <div id="wd-reader-file-temp" className="hidden" />
