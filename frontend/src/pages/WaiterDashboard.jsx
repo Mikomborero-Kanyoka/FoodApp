@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { Bell, Check, Utensils, ArrowLeft, QrCode, X, Zap, Upload } from 'lucide-react';
+import { Bell, Check, Utensils, ArrowLeft, QrCode, X, Zap, Upload, LogOut } from 'lucide-react';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import {
   fetchUserProfile,
@@ -80,6 +80,7 @@ export default function WaiterDashboard() {
   const [showScanner,      setShowScanner]      = useState(false);
   const [scanResult,       setScanResult]       = useState(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [isLoggingOut,     setIsLoggingOut]     = useState(false);
 
   const [user, setUser] = useState(null);
   const [isMgmt, setIsMgmt] = useState(false);
@@ -254,6 +255,24 @@ export default function WaiterDashboard() {
     }
   };
 
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) throw error;
+
+      navigate('/login', { replace: true });
+    } catch (err) {
+      console.error('Failed to sign out:', err);
+      setScanResult({ success: false, message: 'Could not sign out right now' });
+      setIsLoggingOut(false);
+    }
+  };
+
   /* ── Main ─────────────────────────────────────────────────────── */
   return (
     <div className="font-dm min-h-svh bg-[#f2f2f0] pb-24">
@@ -286,7 +305,7 @@ export default function WaiterDashboard() {
           </div>
 
           {/* Ready orders count + scan button */}
-          <div className="anim-1 flex items-center gap-3">
+          <div className="anim-1 flex items-center gap-3 flex-wrap sm:justify-end">
             {orders.length > 0 && (
               <div className="flex items-center gap-2 bg-[#FFD600]/10 border border-[#FFD600]/20 px-5 py-3 rounded-2xl">
                 <div className="pulse-dot relative w-2.5 h-2.5">
@@ -302,6 +321,14 @@ export default function WaiterDashboard() {
               className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-syne font-bold text-sm uppercase tracking-wide px-5 py-3 rounded-2xl transition-all active:scale-95"
             >
               <QrCode size={16} /> Scan Receipt
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex items-center gap-2 bg-white text-[#0a0a0a] hover:bg-[#FFD600] font-syne font-bold text-sm uppercase tracking-wide px-5 py-3 rounded-2xl transition-all active:scale-95 disabled:opacity-60 disabled:pointer-events-none"
+            >
+              <LogOut size={16} />
+              {isLoggingOut ? 'Signing Out...' : 'Logout'}
             </button>
           </div>
         </div>
